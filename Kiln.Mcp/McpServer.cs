@@ -398,28 +398,6 @@ namespace Kiln.Mcp {
 			var expectedDb = string.Empty;
 			if (!string.IsNullOrWhiteSpace(locate.GameAssemblyPath))
 				expectedDb = IdaHeadlessRunner.GetDatabasePath(idaPath, locate.GameAssemblyPath, idbDir);
-			var existingDb = !string.IsNullOrWhiteSpace(expectedDb) && File.Exists(expectedDb) && MetaMatchesExpectedDb(expectedDb, locate)
-				? expectedDb
-				: null;
-
-			if (reuseExisting && !string.IsNullOrWhiteSpace(existingDb)) {
-				var reuseParamsJson = input.ToString(Formatting.None);
-				var reuseJob = jobManager.StartJob("ida.analyze", reuseParamsJson, context => {
-					context.Update(JobState.Running, "reuse_existing", 10, null);
-					context.Log($"Existing IDA database found, skipping analysis: {existingDb}");
-					context.Update(JobState.Completed, "completed", 100, null);
-					return Task.CompletedTask;
-				});
-
-				var reusePayload = new JObject {
-					["jobId"] = reuseJob.JobId,
-					["state"] = reuseJob.State.ToString(),
-					["stage"] = reuseJob.Stage,
-					["percent"] = reuseJob.Percent,
-					["databasePath"] = existingDb,
-				};
-				return ToolOk(id, reusePayload);
-			}
 
 			var scriptPath = input["scriptPath"]?.Value<string>();
 			if (!string.IsNullOrWhiteSpace(scriptPath)) {
@@ -443,6 +421,29 @@ namespace Kiln.Mcp {
 				return ToolError(id, $"script.json not found in il2cpp dump dir: {scriptJson}");
 			if (!File.Exists(il2cppHeader))
 				return ToolError(id, $"il2cpp.h not found in il2cpp dump dir: {il2cppHeader}");
+
+			var existingDb = !string.IsNullOrWhiteSpace(expectedDb) && File.Exists(expectedDb) && MetaMatchesExpectedDb(expectedDb, locate, scriptJson, il2cppHeader)
+				? expectedDb
+				: null;
+
+			if (reuseExisting && !string.IsNullOrWhiteSpace(existingDb)) {
+				var reuseParamsJson = input.ToString(Formatting.None);
+				var reuseJob = jobManager.StartJob("ida.analyze", reuseParamsJson, context => {
+					context.Update(JobState.Running, "reuse_existing", 10, null);
+					context.Log($"Existing IDA database found, skipping analysis: {existingDb}");
+					context.Update(JobState.Completed, "completed", 100, null);
+					return Task.CompletedTask;
+				});
+
+				var reusePayload = new JObject {
+					["jobId"] = reuseJob.JobId,
+					["state"] = reuseJob.State.ToString(),
+					["stage"] = reuseJob.Stage,
+					["percent"] = reuseJob.Percent,
+					["databasePath"] = existingDb,
+				};
+				return ToolOk(id, reusePayload);
+			}
 
 			var autoLoadScript = IdaHeadlessRunner.GetAutoLoadScriptPath();
 			if (!File.Exists(autoLoadScript))
@@ -473,7 +474,7 @@ namespace Kiln.Mcp {
 
 				if (result.Success) {
 					context.Log($"IDA analysis completed. Database: {result.DatabasePath}");
-					TryWriteDbMeta(result.DatabasePath, locate);
+					TryWriteDbMeta(result.DatabasePath, locate, scriptJson, il2cppHeader);
 					context.Update(JobState.Completed, "completed", 100, null);
 				}
 				else {
@@ -1083,7 +1084,7 @@ namespace Kiln.Mcp {
 			return text.Substring(start, length);
 		}
 
-		static bool MetaMatchesExpectedDb(string databasePath, UnityLocateResult locate) {
+		static bool MetaMatchesExpectedDb(string databasePath, UnityLocateResult locate, string scriptJsonPath, string il2cppHeaderPath) {
 			if (string.IsNullOrWhiteSpace(locate.GameAssemblyPath))
 				return false;
 
@@ -1101,6 +1102,11 @@ namespace Kiln.Mcp {
 				var currentAssembly = Path.GetFullPath(locate.GameAssemblyPath);
 				var currentDir = Path.GetFullPath(locate.GameDir);
 				var info = new FileInfo(currentAssembly);
+				var scriptInfo = new FileInfo(scriptJsonPath);
+				var headerInfo = new FileInfo(il2cppHeaderPath);
+
+				if (!scriptInfo.Exists || !headerInfo.Exists)
+					return false;
 
 				if (!string.IsNullOrWhiteSpace(metaGameAssembly)) {
 					var metaAssembly = Path.GetFullPath(metaGameAssembly);
@@ -1119,6 +1125,20 @@ namespace Kiln.Mcp {
 				if (metaTicks >= 0 && metaTicks != info.LastWriteTimeUtc.Ticks)
 					return false;
 
+				var metaScriptSize = metaJson["scriptJsonSize"]?.Value<long?>() ?? -1;
+				var metaScriptTicks = metaJson["scriptJsonLastWriteUtcTicks"]?.Value<long?>() ?? -1;
+				var metaHeaderSize = metaJson["il2cppHeaderSize"]?.Value<long?>() ?? -1;
+				var metaHeaderTicks = metaJson["il2cppHeaderLastWriteUtcTicks"]?.Value<long?>() ?? -1;
+
+				if (metaScriptSize >= 0 && metaScriptSize != scriptInfo.Length)
+					return false;
+				if (metaScriptTicks >= 0 && metaScriptTicks != scriptInfo.LastWriteTimeUtc.Ticks)
+					return false;
+				if (metaHeaderSize >= 0 && metaHeaderSize != headerInfo.Length)
+					return false;
+				if (metaHeaderTicks >= 0 && metaHeaderTicks != headerInfo.LastWriteTimeUtc.Ticks)
+					return false;
+
 				return true;
 			}
 			catch {
@@ -1126,7 +1146,7 @@ namespace Kiln.Mcp {
 			}
 		}
 
-		static void TryWriteDbMeta(string databasePath, UnityLocateResult locate) {
+		static void TryWriteDbMeta(string databasePath, UnityLocateResult locate, string scriptJsonPath, string il2cppHeaderPath) {
 			if (string.IsNullOrWhiteSpace(locate.GameAssemblyPath))
 				return;
 
@@ -1136,11 +1156,22 @@ namespace Kiln.Mcp {
 				if (!info.Exists)
 					return;
 
+				var scriptInfo = new FileInfo(scriptJsonPath);
+				var headerInfo = new FileInfo(il2cppHeaderPath);
+				if (!scriptInfo.Exists || !headerInfo.Exists)
+					return;
+
 				var meta = new JObject {
 					["gameDir"] = Path.GetFullPath(locate.GameDir),
 					["gameAssemblyPath"] = assemblyPath,
 					["gameAssemblySize"] = info.Length,
 					["gameAssemblyLastWriteUtcTicks"] = info.LastWriteTimeUtc.Ticks,
+					["scriptJsonPath"] = Path.GetFullPath(scriptJsonPath),
+					["scriptJsonSize"] = scriptInfo.Length,
+					["scriptJsonLastWriteUtcTicks"] = scriptInfo.LastWriteTimeUtc.Ticks,
+					["il2cppHeaderPath"] = Path.GetFullPath(il2cppHeaderPath),
+					["il2cppHeaderSize"] = headerInfo.Length,
+					["il2cppHeaderLastWriteUtcTicks"] = headerInfo.LastWriteTimeUtc.Ticks,
 				};
 				File.WriteAllText(GetDbMetaPath(databasePath), meta.ToString(Formatting.Indented));
 			}
