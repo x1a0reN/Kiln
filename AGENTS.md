@@ -32,6 +32,7 @@
 - 2026-01-30: Added MCP resources support (resources/list/read) with embedded BepInEx docs.
 - 2026-01-30: Added Kiln v0.1 plan and task checklist (PLAN.md, TASK.md).
 - 2026-01-30: Phase 0 kickoff — renamed project to Kiln, removed dnSpyEx plugin, created Kiln.Mcp/Kiln.Core/Kiln.Plugins structure, rewrote README and MCP tool list, added kiln.config.template.json and updated .gitignore.
+- 2026-01-30: Phase 1 complete — added KilnConfig loader, JobManager with job.json persistence, job logs, and workflow.run/status/logs/cancel MCP handlers (stub workflow runner).
 
 ## Next Steps
 - Implement Phase 1: Job state machine, persistence, and workflow.* MCP endpoints.
@@ -63,3 +64,4 @@ dotnet run --project Kiln.Mcp -c Release
 - After each code change, update project progress in AGENTS.md.
 - Whenever AGENTS.md is changed, mirror the corresponding Chinese updates into AGENTS-SC.md (rule block itself excluded).
 - Each time a new MCP tool is added, update kiln.exampleFlow with usage and examples.
+- All work happens on feature branches; the user opens PRs and performs the final merge.

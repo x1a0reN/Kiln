@@ -32,6 +32,7 @@
 - 2026-01-30：新增 MCP 资源支持（resources/list/read），内置 BepInEx 文档。
 - 2026-01-30：新增 Kiln v0.1 计划与任务清单（PLAN.md、TASK.md）。
 - 2026-01-30：Phase 0 启动——更名为 Kiln、移除 dnSpyEx 插件、建立 Kiln.Mcp/Kiln.Core/Kiln.Plugins 结构、重写 README 与工具列表、添加 kiln.config.template.json 并更新 .gitignore。
+- 2026-01-30：Phase 1 完成——新增 KilnConfig 加载、JobManager（job.json 持久化 + 日志）、实现 workflow.run/status/logs/cancel MCP 处理（工作流暂为 stub）。
 
 ## 下一步
 - 实现 Phase 1：Job 状态机、持久化、workflow.* MCP 接口。
@@ -63,3 +64,4 @@ dotnet run --project Kiln.Mcp -c Release
 - 每次代码变更后更新 AGENTS.md 的进度。
 - AGENTS.md 变更需同步更新 AGENTS-SC.md（规则块本身除外）。
 - 新增 MCP 工具时需要更新 kiln.exampleFlow 的示例与用法。
+- 所有改动在功能分支完成；PR 由用户发起并由用户最终合并。

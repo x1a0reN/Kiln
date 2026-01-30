@@ -1,19 +1,22 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Kiln.Core;
 
 namespace Kiln.Mcp {
 	static class Program {
 		static async Task<int> Main(string[] args) {
 			try {
 				KilnLog.Info("kiln mcp start");
+				var config = KilnConfig.Load();
+				var jobManager = new JobManager(config);
 				using var cts = new CancellationTokenSource();
 				Console.CancelKeyPress += (_, e) => {
 					e.Cancel = true;
 					cts.Cancel();
 				};
 
-				var server = new McpServer();
+				var server = new McpServer(jobManager);
 				await server.RunAsync(cts.Token).ConfigureAwait(false);
 				return 0;
 			}

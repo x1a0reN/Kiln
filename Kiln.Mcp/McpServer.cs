@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Kiln.Core;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -9,8 +10,10 @@ namespace Kiln.Mcp {
 	sealed class McpServer {
 		readonly ToolCatalog catalog;
 		readonly ResourceCatalog resources;
+		readonly JobManager jobManager;
 
-		public McpServer() {
+		public McpServer(JobManager jobManager) {
+			this.jobManager = jobManager ?? throw new ArgumentNullException(nameof(jobManager));
 			catalog = new ToolCatalog();
 			resources = new ResourceCatalog();
 		}
@@ -155,8 +158,98 @@ namespace Kiln.Mcp {
 				});
 			}
 
+			if (tool.Method == "workflow.run")
+				return HandleWorkflowRun(id, input);
+			if (tool.Method == "workflow.status")
+				return HandleWorkflowStatus(id, input);
+			if (tool.Method == "workflow.logs")
+				return HandleWorkflowLogs(id, input);
+			if (tool.Method == "workflow.cancel")
+				return HandleWorkflowCancel(id, input);
+
 			await Task.Yield();
 			return ToolError(id, $"Tool not implemented yet: {tool.Name}");
+		}
+
+		JObject HandleWorkflowRun(JToken? id, JObject input) {
+			var flowName = input["flowName"]?.Value<string>();
+			if (string.IsNullOrWhiteSpace(flowName))
+				return ToolError(id, "Missing flowName");
+
+			var parameters = input["params"] as JObject;
+			var paramsJson = parameters?.ToString(Formatting.None) ?? "{}";
+
+			var job = jobManager.StartWorkflow(flowName, paramsJson);
+			var payload = new JObject {
+				["jobId"] = job.JobId,
+				["state"] = job.State.ToString(),
+				["stage"] = job.Stage,
+				["percent"] = job.Percent,
+			};
+			return ToolOk(id, payload);
+		}
+
+		JObject HandleWorkflowStatus(JToken? id, JObject input) {
+			var jobId = input["jobId"]?.Value<string>();
+			if (string.IsNullOrWhiteSpace(jobId))
+				return ToolError(id, "Missing jobId");
+
+			if (!jobManager.TryGetStatus(jobId, out var info))
+				return ToolError(id, $"Unknown job: {jobId}");
+
+			var payload = new JObject {
+				["jobId"] = info.JobId,
+				["state"] = info.State.ToString(),
+				["stage"] = info.Stage,
+				["percent"] = info.Percent,
+			};
+			return ToolOk(id, payload);
+		}
+
+		JObject HandleWorkflowLogs(JToken? id, JObject input) {
+			var jobId = input["jobId"]?.Value<string>();
+			if (string.IsNullOrWhiteSpace(jobId))
+				return ToolError(id, "Missing jobId");
+
+			var tail = input["tail"]?.Value<int?>() ?? 200;
+			if (!jobManager.TryReadLogs(jobId, tail, out var logs))
+				return ToolError(id, $"Unknown job: {jobId}");
+
+			return ToolOk(id, logs);
+		}
+
+		JObject HandleWorkflowCancel(JToken? id, JObject input) {
+			var jobId = input["jobId"]?.Value<string>();
+			if (string.IsNullOrWhiteSpace(jobId))
+				return ToolError(id, "Missing jobId");
+
+			if (!jobManager.TryCancel(jobId, out var info))
+				return ToolError(id, $"Unknown job: {jobId}");
+
+			var payload = new JObject {
+				["jobId"] = info.JobId,
+				["state"] = info.State.ToString(),
+				["stage"] = info.Stage,
+				["percent"] = info.Percent,
+			};
+			return ToolOk(id, payload);
+		}
+
+		static JObject ToolOk(JToken? id, JToken payload) {
+			return ToolOk(id, payload.ToString(Formatting.Indented));
+		}
+
+		static JObject ToolOk(JToken? id, string text) {
+			var content = new JArray {
+				new JObject {
+					["type"] = "text",
+					["text"] = text,
+				},
+			};
+			return MakeResult(id, new JObject {
+				["content"] = content,
+				["isError"] = false,
+			});
 		}
 
 		static JObject ToolError(JToken? id, string message) {

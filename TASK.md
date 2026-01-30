@@ -6,9 +6,9 @@
 - [x] 建立 Kiln.Core / Kiln.Mcp / Kiln.Plugins 目录结构
 
 ## Phase 1：Workflow + Job 管理
-- [ ] Job 状态机：Pending / Running / Completed / Failed / Canceled
-- [ ] Job 持久化：workspace/<job_id>/job.json
-- [ ] workflow.status / workflow.logs / workflow.cancel MCP 接口
+- [x] Job 状态机：Pending / Running / Completed / Failed / Canceled
+- [x] Job 持久化：workspace/<job_id>/job.json
+- [x] workflow.status / workflow.logs / workflow.cancel MCP 接口
 
 ## Phase 2：Unity 定位 + Il2CppDumper
 - [ ] unity_locate：定位 GameAssembly.dll / global-metadata.dat
