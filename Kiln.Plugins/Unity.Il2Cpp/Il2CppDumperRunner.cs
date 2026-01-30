@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace Kiln.Plugins.Unity.Il2Cpp {
 	public static class Il2CppDumperRunner {
@@ -32,9 +33,12 @@ namespace Kiln.Plugins.Unity.Il2Cpp {
 			if (process is null)
 				throw new InvalidOperationException("Failed to start Il2CppDumper process.");
 
-			var stdout = process.StandardOutput.ReadToEnd();
-			var stderr = process.StandardError.ReadToEnd();
+			var stdoutTask = process.StandardOutput.ReadToEndAsync();
+			var stderrTask = process.StandardError.ReadToEndAsync();
 			process.WaitForExit();
+			Task.WaitAll(stdoutTask, stderrTask);
+			var stdout = stdoutTask.Result;
+			var stderr = stderrTask.Result;
 
 			return new Il2CppDumpResult(
 				process.ExitCode == 0,

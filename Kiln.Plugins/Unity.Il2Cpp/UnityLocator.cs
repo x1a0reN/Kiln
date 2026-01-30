@@ -2,9 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security;
 
 namespace Kiln.Plugins.Unity.Il2Cpp {
 	public static class UnityLocator {
+		static readonly EnumerationOptions RecursiveOptions = new EnumerationOptions {
+			RecurseSubdirectories = true,
+			IgnoreInaccessible = true,
+		};
+
 		public static UnityLocateResult Locate(string gameDir) {
 			if (string.IsNullOrWhiteSpace(gameDir) || !Directory.Exists(gameDir)) {
 				return new UnityLocateResult(
@@ -49,13 +55,13 @@ namespace Kiln.Plugins.Unity.Il2Cpp {
 			if (File.Exists(direct))
 				return direct;
 
-			return Directory.EnumerateFiles(gameDir, "GameAssembly.dll", SearchOption.AllDirectories)
+			return EnumerateFilesSafe(gameDir, "GameAssembly.dll")
 				.FirstOrDefault();
 		}
 
 		static string? FindGlobalMetadata(string gameDir, out string? dataDir) {
 			dataDir = null;
-			var metadata = Directory.EnumerateFiles(gameDir, "global-metadata.dat", SearchOption.AllDirectories)
+			var metadata = EnumerateFilesSafe(gameDir, "global-metadata.dat")
 				.FirstOrDefault(path => path.IndexOf($"{Path.DirectorySeparatorChar}il2cpp_data{Path.DirectorySeparatorChar}Metadata{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase) >= 0);
 
 			if (metadata is null)
@@ -75,13 +81,22 @@ namespace Kiln.Plugins.Unity.Il2Cpp {
 		}
 
 		static string? FindManagedDir(string gameDir) {
-			var managed = Directory.EnumerateFiles(gameDir, "Assembly-CSharp.dll", SearchOption.AllDirectories)
+			var managed = EnumerateFilesSafe(gameDir, "Assembly-CSharp.dll")
 				.FirstOrDefault(path => path.IndexOf($"{Path.DirectorySeparatorChar}Managed{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase) >= 0);
 
 			if (managed is null)
 				return null;
 
 			return Path.GetDirectoryName(managed);
+		}
+
+		static IEnumerable<string> EnumerateFilesSafe(string gameDir, string pattern) {
+			try {
+				return Directory.EnumerateFiles(gameDir, pattern, RecursiveOptions);
+			}
+			catch (Exception ex) when (ex is UnauthorizedAccessException || ex is PathTooLongException || ex is IOException || ex is SecurityException) {
+				return Array.Empty<string>();
+			}
 		}
 	}
 }
