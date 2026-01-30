@@ -47,6 +47,7 @@
 - 2026-01-30：Phase 5 完成——patch_codegen 模板 + package_mod 打包/清单/回滚产物。
 - 2026-01-30：Phase 5 修复——打包 zip 使用临时文件避免自包含。
 - 2026-01-30：Phase 3/4 增强——ida_analyze 支持复用现有 .i64/.idb 跳过分析。
+- 2026-01-30：Phase 3/4 修复——reuseExisting 仅在匹配当前游戏数据库时生效。
 
 ## 下一步
 - 实现 Phase 3：IDA headless 分析 + 符号/类型加载。

@@ -395,7 +395,7 @@ namespace Kiln.Mcp {
 				expectedDb = IdaHeadlessRunner.GetDatabasePath(idaPath, locate.GameAssemblyPath, idbDir);
 			var existingDb = !string.IsNullOrWhiteSpace(expectedDb) && File.Exists(expectedDb)
 				? expectedDb
-				: FindIdaDatabase(idbDir);
+				: null;
 
 			if (reuseExisting && !string.IsNullOrWhiteSpace(existingDb)) {
 				var reuseParamsJson = input.ToString(Formatting.None);
