@@ -50,6 +50,36 @@ namespace dnSpyEx.MCP.Bridge {
 			// Source: https://github.com/KernelErr/dnSpy.Extension.MCP (GPL-3.0).
 			// Embedded docs are copied as-is to provide MCP resources for BepInEx workflows.
 
+			resources["dnspyex://docs/resource-index"] = @"# dnSpyEx MCP Resource Index
+
+This index helps AI clients discover and load embedded MCP resources.
+
+## How to use resources
+
+1) List resources:
+- MCP method: resources/list
+
+2) Read a resource:
+- MCP method: resources/read
+- Params: { ""uri"": ""<resource-uri>"" }
+
+## Resource categories
+
+### BepInEx v6 documentation
+
+- bepinex://docs/plugin-structure
+- bepinex://docs/harmony-patching
+- bepinex://docs/configuration
+- bepinex://docs/common-scenarios
+- bepinex://docs/il2cpp-guide
+- bepinex://docs/mono-vs-il2cpp
+
+## Notes
+
+- Resources are read-only and embedded in the bridge.
+- Use resources/read whenever you need authoritative guidance during MCP tool usage.
+";
+
 			// Plugin Structure and Basics
 			resources["bepinex://docs/plugin-structure"] = @"# BepInEx Plugin Structure (v6.0.0-pre.1)
 

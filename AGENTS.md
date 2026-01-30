@@ -61,6 +61,7 @@
 - 2026-01-30: Cleaned standalone repo layout (kept Extensions\dnSpyEx.MCP) and removed tracked build artifacts; expanded .gitignore to cover bin/obj.
 - 2026-01-30: Added standalone README (build/run + binary dependency notes) and removed remotes from the legacy dnSpyEx.MCP fork to avoid confusion.
 - 2026-01-30: Added MCP resources support in the bridge (resources/list, resources/read) with embedded BepInEx documentation.
+- 2026-01-30: Added dnSpyEx MCP resource index document (dnspyex://docs/resource-index) to guide AI clients.
 
 ## Next Steps
 - Build the solution and confirm both projects compile.
