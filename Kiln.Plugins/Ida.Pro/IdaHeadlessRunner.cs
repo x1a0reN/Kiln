@@ -36,18 +36,19 @@ namespace Kiln.Plugins.Ida.Pro {
 			};
 
 			if (!string.IsNullOrWhiteSpace(scriptPath))
-				args.Add($"-S\"{BuildScriptInvocation(scriptPath, scriptArgs)}\"");
+				args.Add($"-S{BuildScriptInvocation(scriptPath, scriptArgs)}");
 
 			args.Add($"\"{inputBinaryPath}\"");
 
 			var psi = new ProcessStartInfo {
 				FileName = idaPath,
-				Arguments = string.Join(" ", args),
 				UseShellExecute = false,
 				RedirectStandardOutput = true,
 				RedirectStandardError = true,
 				CreateNoWindow = true,
 			};
+			foreach (var arg in args)
+				psi.ArgumentList.Add(arg);
 
 			using var process = new Process { StartInfo = psi };
 			if (!process.Start())

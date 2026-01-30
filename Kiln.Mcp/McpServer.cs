@@ -301,6 +301,8 @@ namespace Kiln.Mcp {
 				outputDir = config.Il2CppDumpDir;
 			if (string.IsNullOrWhiteSpace(outputDir))
 				return ToolError(id, "Missing outputDir (set il2cppDumpDir in kiln.config.json).");
+			if (!string.IsNullOrWhiteSpace(config.Il2CppDumpDir) && !PathsEqual(outputDir, config.Il2CppDumpDir))
+				return ToolError(id, "outputDir must match il2cppDumpDir in kiln.config.json.");
 
 			var dumperPath = input["dumperPath"]?.Value<string>();
 			if (!string.IsNullOrWhiteSpace(dumperPath)) {

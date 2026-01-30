@@ -40,6 +40,7 @@
 - 2026-01-30：Phase 3 启动——ida_analyze 后台任务 + IDA headless 执行，产出 idb/log，并支持脚本钩子。
 - 2026-01-30：Phase 3 符号——IDA 分析完成后自动加载 Il2CppDumper 符号/类型（包装脚本）。
 - 2026-01-30：Phase 3 配置——发布目录友好默认值与相对路径解析（dump/ida 输出）。
+- 2026-01-30：Phase 3 修复——IDA -S 参数引用处理 + dump 目录一致性校验。
 
 ## 下一步
 - 实现 Phase 3：IDA headless 分析 + 符号/类型加载。
