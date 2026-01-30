@@ -382,10 +382,15 @@ namespace Kiln.Mcp {
 				return ToolError(id, $"idaPath not found: {idaPath}");
 
 			var idbDir = input["idbDir"]?.Value<string>();
-			if (string.IsNullOrWhiteSpace(idbDir))
+			var idbDirProvided = !string.IsNullOrWhiteSpace(idbDir);
+			if (!idbDirProvided)
 				idbDir = config.IdaOutputDir;
 			if (string.IsNullOrWhiteSpace(idbDir))
 				return ToolError(id, "Missing idbDir (set idaOutputDir in kiln.config.json).");
+			if (!idbDirProvided)
+				idbDir = config.GetIdaOutputDirForGame(gameDir);
+
+			input["idbDir"] = idbDir;
 
 			var reuseExisting = input["reuseExisting"]?.Value<bool?>() ?? true;
 
@@ -494,13 +499,14 @@ namespace Kiln.Mcp {
 			if (!jobManager.TryGetStatus(jobId, out _))
 				return ToolError(id, $"Unknown job: {jobId}");
 
-			var jobDir = Path.Combine(config.WorkspaceRoot, jobId);
-			var analysisDir = Path.Combine(jobDir, "ida");
+			var analysisDir = ResolveAnalysisDir(jobId, input);
+			if (string.IsNullOrWhiteSpace(analysisDir))
+				return ToolError(id, "Missing analysis directory (set idaOutputDir or run ida_analyze first).");
 			Directory.CreateDirectory(analysisDir);
 
 			var databasePath = FindIdaDatabase(analysisDir);
 			if (string.IsNullOrWhiteSpace(databasePath))
-				return ToolError(id, "IDA database not found (expected .i64/.idb in workspace/job/ida).");
+				return ToolError(id, "IDA database not found (expected .i64/.idb in analysis directory).");
 
 			var exportPath = input["outputPath"]?.Value<string>();
 			if (string.IsNullOrWhiteSpace(exportPath))
@@ -534,13 +540,14 @@ namespace Kiln.Mcp {
 			if (!jobManager.TryGetStatus(jobId, out _))
 				return ToolError(id, $"Unknown job: {jobId}");
 
-			var jobDir = Path.Combine(config.WorkspaceRoot, jobId);
-			var analysisDir = Path.Combine(jobDir, "ida");
+			var analysisDir = ResolveAnalysisDir(jobId, input);
+			if (string.IsNullOrWhiteSpace(analysisDir))
+				return ToolError(id, "Missing analysis directory (set idaOutputDir or run ida_analyze first).");
 			Directory.CreateDirectory(analysisDir);
 
 			var databasePath = FindIdaDatabase(analysisDir);
 			if (string.IsNullOrWhiteSpace(databasePath))
-				return ToolError(id, "IDA database not found (expected .i64/.idb in workspace/job/ida).");
+				return ToolError(id, "IDA database not found (expected .i64/.idb in analysis directory).");
 
 			var exportPath = input["outputPath"]?.Value<string>();
 			if (string.IsNullOrWhiteSpace(exportPath))

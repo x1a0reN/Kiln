@@ -106,6 +106,11 @@ namespace Kiln.Core {
 			return Path.Combine(Il2CppRootDir, name);
 		}
 
+		public string GetIdaOutputDirForGame(string gameDir) {
+			var name = GetSafeGameName(gameDir);
+			return Path.Combine(IdaOutputDir, name);
+		}
+
 		static string GetSafeGameName(string gameDir) {
 			var trimmed = (gameDir ?? string.Empty).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 			var name = string.IsNullOrWhiteSpace(trimmed) ? "game" : Path.GetFileName(trimmed);
