@@ -387,6 +387,35 @@ namespace Kiln.Mcp {
 			if (string.IsNullOrWhiteSpace(idbDir))
 				return ToolError(id, "Missing idbDir (set idaOutputDir in kiln.config.json).");
 
+			var reuseExisting = input["reuseExisting"]?.Value<bool?>() ?? true;
+
+			var locate = UnityLocator.Locate(gameDir);
+			var expectedDb = string.Empty;
+			if (!string.IsNullOrWhiteSpace(locate.GameAssemblyPath))
+				expectedDb = IdaHeadlessRunner.GetDatabasePath(idaPath, locate.GameAssemblyPath, idbDir);
+			var existingDb = !string.IsNullOrWhiteSpace(expectedDb) && File.Exists(expectedDb)
+				? expectedDb
+				: FindIdaDatabase(idbDir);
+
+			if (reuseExisting && !string.IsNullOrWhiteSpace(existingDb)) {
+				var reuseParamsJson = input.ToString(Formatting.None);
+				var reuseJob = jobManager.StartJob("ida.analyze", reuseParamsJson, context => {
+					context.Update(JobState.Running, "reuse_existing", 10, null);
+					context.Log($"Existing IDA database found, skipping analysis: {existingDb}");
+					context.Update(JobState.Completed, "completed", 100, null);
+					return Task.CompletedTask;
+				});
+
+				var reusePayload = new JObject {
+					["jobId"] = reuseJob.JobId,
+					["state"] = reuseJob.State.ToString(),
+					["stage"] = reuseJob.Stage,
+					["percent"] = reuseJob.Percent,
+					["databasePath"] = existingDb,
+				};
+				return ToolOk(id, reusePayload);
+			}
+
 			var scriptPath = input["scriptPath"]?.Value<string>();
 			if (!string.IsNullOrWhiteSpace(scriptPath)) {
 				var expectedScriptPath = config.GetIdaSymbolsScriptPath();
@@ -414,7 +443,6 @@ namespace Kiln.Mcp {
 			if (!File.Exists(autoLoadScript))
 				return ToolError(id, $"Auto-load script not found: {autoLoadScript}");
 
-			var locate = UnityLocator.Locate(gameDir);
 			if (!locate.IsIl2Cpp || string.IsNullOrWhiteSpace(locate.GameAssemblyPath))
 				return ToolError(id, "Unity IL2CPP GameAssembly.dll not found.");
 
@@ -453,6 +481,7 @@ namespace Kiln.Mcp {
 				["state"] = job.State.ToString(),
 				["stage"] = job.Stage,
 				["percent"] = job.Percent,
+				["databasePath"] = expectedDb,
 			};
 			return ToolOk(id, payload);
 		}
@@ -1169,7 +1198,7 @@ Arguments: { ""jobId"": ""..."" }
 - il2cpp_dump
   { ""gameDir"": ""C:\\Games\\Example"", ""dumperPath"": ""C:\\Kiln\\Il2CppDumper"" }
 - ida_analyze
-  { ""gameDir"": ""C:\\Games\\Example"", ""idaPath"": ""C:\\Program Files\\IDA Professional 9.2\\idat64.exe"" }
+  { ""gameDir"": ""C:\\Games\\Example"", ""idaPath"": ""C:\\Program Files\\IDA Professional 9.2\\idat64.exe"", ""reuseExisting"": true }
 - ida_export_symbols
   { ""jobId"": ""..."" }
 - ida_export_pseudocode

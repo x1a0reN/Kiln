@@ -46,6 +46,7 @@
 - 2026-01-30: Phase 4 analysis — added analysis.* tools for indexed symbol/pseudocode search and retrieval.
 - 2026-01-30: Phase 5 complete — patch_codegen template + package_mod zip/manifest/rollback output.
 - 2026-01-30: Phase 5 fix — zip packaging now uses temp file to avoid self-inclusion.
+- 2026-01-30: Phase 3/4 enhancement — ida_analyze can reuse existing .i64/.idb to skip analysis.
 
 ## Next Steps
 - Implement Phase 3: IDA headless analysis + symbol/typing load.

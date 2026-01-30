@@ -115,6 +115,7 @@ namespace Kiln.Mcp {
 							["idaPath"] = new JObject { ["type"] = "string", ["description"] = "Required; must match kiln.config.json (idaPath)." },
 							["idbDir"] = new JObject { ["type"] = "string", ["description"] = "Optional; defaults to idaOutputDir in kiln.config.json." },
 							["scriptPath"] = new JObject { ["type"] = "string", ["description"] = "Optional; must match ida_with_struct_py3.py inside il2cppRootDir." },
+							["reuseExisting"] = new JObject { ["type"] = "boolean", ["description"] = "Optional; reuse existing .i64/.idb in idbDir (default true)." },
 						},
 						["required"] = new JArray("gameDir", "idaPath"),
 						["additionalProperties"] = false,
