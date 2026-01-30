@@ -148,6 +148,8 @@ Workflow:
 ## Notes
 - User wants progress tracked in AGENTS.md on each update.
 - User confirms only .NET 10 builds; build commands should keep auto-copy enabled (do not set DisableDnSpyExInstallCopy).
+- Working directory: D:\Projects\dnSpyEx.MCP.Standalone
+- Reference source directory (read-only): D:\Projects\dnSpyEx.MCP
 
 ## Rules
 - After each change, confirm build succeeds with no errors, then git commit and push to the repo.

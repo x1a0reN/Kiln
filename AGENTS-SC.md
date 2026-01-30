@@ -148,6 +148,8 @@ dotnet run --project Tools/dnSpyEx.MCP.Bridge -c Release
 ## 备注
 - 用户要求每次更新都记录进度到 AGENTS.md。
 - 用户确认仅使用 .NET 10；构建命令保持自动复制开启（不要设置 DisableDnSpyExInstallCopy）。
+- 工作目录：D:\Projects\dnSpyEx.MCP.Standalone
+- 参考源码目录（只读）：D:\Projects\dnSpyEx.MCP
 
 ## 规则
 - 每次改动后确认构建无错误，然后提交并推送。
