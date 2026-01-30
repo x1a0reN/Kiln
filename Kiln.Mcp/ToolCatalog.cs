@@ -98,10 +98,10 @@ namespace Kiln.Mcp {
 						["type"] = "object",
 						["properties"] = new JObject {
 							["gameDir"] = new JObject { ["type"] = "string" },
-							["dumperPath"] = new JObject { ["type"] = "string" },
+							["dumperPath"] = new JObject { ["type"] = "string", ["description"] = "Optional; must match kiln.config.json (client overrides are rejected)." },
 							["outputDir"] = new JObject { ["type"] = "string" },
 						},
-						["required"] = new JArray("gameDir", "dumperPath", "outputDir"),
+						["required"] = new JArray("gameDir", "outputDir"),
 						["additionalProperties"] = false,
 					},
 					"il2cpp_dump"),
