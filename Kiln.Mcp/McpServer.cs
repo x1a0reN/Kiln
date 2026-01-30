@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Kiln.Core;
+using Kiln.Plugins.Ida.Pro;
 using Kiln.Plugins.Unity.Il2Cpp;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -176,6 +177,8 @@ namespace Kiln.Mcp {
 				return HandleUnityLocate(id, input);
 			if (tool.Method == "il2cpp_dump")
 				return HandleIl2CppDump(id, input);
+			if (tool.Method == "ida_analyze")
+				return HandleIdaAnalyze(id, input);
 
 			await Task.Yield();
 			return ToolError(id, $"Tool not implemented yet: {tool.Name}");
@@ -334,6 +337,73 @@ namespace Kiln.Mcp {
 			return ToolOk(id, payload);
 		}
 
+		JObject HandleIdaAnalyze(JToken? id, JObject input) {
+			var gameDir = input["gameDir"]?.Value<string>();
+			if (string.IsNullOrWhiteSpace(gameDir))
+				return ToolError(id, "Missing gameDir");
+
+			var idaPath = input["idaPath"]?.Value<string>();
+			if (!string.IsNullOrWhiteSpace(idaPath)) {
+				if (string.IsNullOrWhiteSpace(config.IdaPath))
+					return ToolError(id, "idaPath override is not allowed; set kiln.config.json (idaPath).");
+				if (!PathsEqual(idaPath, config.IdaPath))
+					return ToolError(id, "idaPath override is not allowed; use the configured idaPath.");
+			}
+
+			idaPath = config.IdaPath;
+			if (string.IsNullOrWhiteSpace(idaPath))
+				return ToolError(id, "Missing idaPath (and no default in kiln.config.json)");
+			if (!File.Exists(idaPath))
+				return ToolError(id, $"idaPath not found: {idaPath}");
+
+			var idbDir = input["idbDir"]?.Value<string>();
+			if (string.IsNullOrWhiteSpace(idbDir))
+				return ToolError(id, "Missing idbDir");
+
+			var scriptPath = input["scriptPath"]?.Value<string>();
+
+			var locate = UnityLocator.Locate(gameDir);
+			if (!locate.IsIl2Cpp || string.IsNullOrWhiteSpace(locate.GameAssemblyPath))
+				return ToolError(id, "Unity IL2CPP GameAssembly.dll not found.");
+
+			var paramsJson = input.ToString(Formatting.None);
+			var job = jobManager.StartJob("ida.analyze", paramsJson, async context => {
+				context.Update(JobState.Running, "ida_analyze", 5, null);
+				context.Log($"IDA analysis started. Target: {locate.GameAssemblyPath}");
+
+				IdaAnalyzeResult result;
+				try {
+					result = await IdaHeadlessRunner.RunAsync(
+						idaPath,
+						locate.GameAssemblyPath,
+						idbDir,
+						scriptPath,
+						context.Token,
+						context.Log).ConfigureAwait(false);
+				}
+				catch (OperationCanceledException) {
+					return;
+				}
+
+				if (result.Success) {
+					context.Log($"IDA analysis completed. Database: {result.DatabasePath}");
+					context.Update(JobState.Completed, "completed", 100, null);
+				}
+				else {
+					context.Log($"IDA analysis failed. ExitCode={result.ExitCode}");
+					context.Update(JobState.Failed, "failed", 100, $"IDA exited with code {result.ExitCode}");
+				}
+			});
+
+			var payload = new JObject {
+				["jobId"] = job.JobId,
+				["state"] = job.State.ToString(),
+				["stage"] = job.Stage,
+				["percent"] = job.Percent,
+			};
+			return ToolOk(id, payload);
+		}
+
 		static bool PathsEqual(string left, string right) {
 			try {
 				var leftFull = Path.GetFullPath(left)
@@ -454,7 +524,7 @@ Arguments: { ""jobId"": ""..."" }
 - il2cpp_dump
   { ""gameDir"": ""C:\\Games\\Example"", ""dumperPath"": ""C:\\Tools\\Il2CppDumper"", ""outputDir"": ""C:\\Kiln\\work\\dump"" }
 - ida_analyze
-  { ""gameDir"": ""C:\\Games\\Example"", ""idaPath"": ""C:\\Program Files\\IDA Professional 9.2\\idat64.exe"", ""idbDir"": ""C:\\Kiln\\work\\ida"" }
+  { ""gameDir"": ""C:\\Games\\Example"", ""idaPath"": ""C:\\Program Files\\IDA Professional 9.2\\idat64.exe"", ""idbDir"": ""C:\\Kiln\\work\\ida"", ""scriptPath"": ""C:\\Kiln\\work\\ida\\apply_symbols.py"" }
 - ida_export_symbols
   { ""jobId"": ""..."" }
 - ida_export_pseudocode

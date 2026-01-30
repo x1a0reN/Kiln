@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\\Kiln.Core\\Kiln.Core.csproj" />
+    <ProjectReference Include="..\\Kiln.Plugins\\Ida.Pro\\Kiln.Plugins.Ida.Pro.csproj" />
     <ProjectReference Include="..\\Kiln.Plugins\\Unity.Il2Cpp\\Kiln.Plugins.Unity.Il2Cpp.csproj" />
   </ItemGroup>
 

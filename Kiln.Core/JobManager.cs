@@ -28,13 +28,35 @@ namespace Kiln.Core {
 			if (string.IsNullOrWhiteSpace(flowName))
 				throw new ArgumentException("flowName is required", nameof(flowName));
 
+			return StartJob(flowName, paramsJson, RunStubWorkflowAsync);
+		}
+
+		public JobRecord StartJob(string flowName, string paramsJson, Func<JobContext, Task> runner) {
+			if (string.IsNullOrWhiteSpace(flowName))
+				throw new ArgumentException("flowName is required", nameof(flowName));
+			if (runner is null)
+				throw new ArgumentNullException(nameof(runner));
+
 			var job = CreateJob(flowName, paramsJson);
 			var cts = new CancellationTokenSource();
 			lock (gate) {
 				cancellations[job.JobId] = cts;
 			}
 
-			_ = Task.Run(() => RunStubWorkflowAsync(job.JobId, cts.Token));
+			_ = Task.Run(async () => {
+				var context = new JobContext(this, job.JobId, cts.Token);
+				try {
+					await runner(context).ConfigureAwait(false);
+				}
+				catch (OperationCanceledException) {
+					context.Log("Job canceled.");
+				}
+				catch (Exception ex) {
+					context.Log($"Job failed: {ex.Message}");
+					context.Update(JobState.Failed, "failed", 100, ex.Message);
+				}
+			});
+
 			return job;
 		}
 
@@ -118,19 +140,19 @@ namespace Kiln.Core {
 			return job;
 		}
 
-		async Task RunStubWorkflowAsync(string jobId, CancellationToken token) {
-			UpdateJob(jobId, JobState.Running, "running", 5, null);
-			AppendLog(jobId, "Workflow stub started.");
+		async Task RunStubWorkflowAsync(JobContext context) {
+			context.Update(JobState.Running, "running", 5, null);
+			context.Log("Workflow stub started.");
 
 			try {
-				await Task.Delay(300, token).ConfigureAwait(false);
+				await Task.Delay(300, context.Token).ConfigureAwait(false);
 			}
 			catch (OperationCanceledException) {
 				return;
 			}
 
-			UpdateJob(jobId, JobState.Completed, "completed", 100, null);
-			AppendLog(jobId, "Workflow stub completed.");
+			context.Update(JobState.Completed, "completed", 100, null);
+			context.Log("Workflow stub completed.");
 		}
 
 		void UpdateJob(string jobId, JobState state, string stage, int percent, string? error) {
@@ -205,5 +227,26 @@ namespace Kiln.Core {
 		string GetJobDir(string jobId) => Path.Combine(workspaceRoot, jobId);
 		string GetJobPath(string jobId) => Path.Combine(GetJobDir(jobId), "job.json");
 		string GetLogPath(string jobId) => Path.Combine(GetJobDir(jobId), "job.log");
+
+		public sealed class JobContext {
+			readonly JobManager manager;
+
+			internal JobContext(JobManager manager, string jobId, CancellationToken token) {
+				this.manager = manager;
+				JobId = jobId;
+				Token = token;
+			}
+
+			public string JobId { get; }
+			public CancellationToken Token { get; }
+
+			public void Update(JobState state, string stage, int percent, string? error) {
+				manager.UpdateJob(JobId, state, stage, percent, error);
+			}
+
+			public void Log(string message) {
+				manager.AppendLog(JobId, message);
+			}
+		}
 	}
 }
