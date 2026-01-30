@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/Extensions/">
+    <Project Path="Extensions/dnSpyEx.MCP/dnSpyEx.MCP.csproj" />
+  </Folder>
+  <Folder Name="/Tools/">
+    <Project Path="Tools/dnSpyEx.MCP.Bridge/dnSpyEx.MCP.Bridge.csproj" />
+  </Folder>
+</Solution>

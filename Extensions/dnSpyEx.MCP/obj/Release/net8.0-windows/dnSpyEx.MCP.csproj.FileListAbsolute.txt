@@ -1,0 +1,16 @@
+D:\Projects\dnSpyEx.MCP\Extensions\dnSpyEx.MCP\obj\Release\net8.0-windows\dnSpyEx.MCP.csproj.AssemblyReference.cache
+D:\Projects\dnSpyEx.MCP\Extensions\dnSpyEx.MCP\obj\Release\net8.0-windows\dnSpyEx.MCP.GeneratedMSBuildEditorConfig.editorconfig
+D:\Projects\dnSpyEx.MCP\Extensions\dnSpyEx.MCP\obj\Release\net8.0-windows\dnSpyEx.MCP.AssemblyInfoInputs.cache
+D:\Projects\dnSpyEx.MCP\Extensions\dnSpyEx.MCP\obj\Release\net8.0-windows\dnSpyEx.MCP.AssemblyInfo.cs
+D:\Projects\dnSpyEx.MCP\Extensions\dnSpyEx.MCP\obj\Release\net8.0-windows\dnSpyEx.MCP.csproj.CoreCompileInputs.cache
+D:\Projects\dnSpyEx.MCP\Extensions\dnSpyEx.MCP\obj\Release\net8.0-windows\dnSpyEx.MCP.sourcelink.json
+D:\Projects\dnSpyEx.MCP\Extensions\dnSpyEx.MCP\bin\Release\net8.0-windows\dnSpyEx.MCP.x.deps.json
+D:\Projects\dnSpyEx.MCP\Extensions\dnSpyEx.MCP\bin\Release\net8.0-windows\dnSpyEx.MCP.x.dll
+D:\Projects\dnSpyEx.MCP\Extensions\dnSpyEx.MCP\bin\Release\net8.0-windows\dnSpyEx.MCP.x.pdb
+D:\Projects\dnSpyEx.MCP\Extensions\dnSpyEx.MCP\bin\Release\net8.0-windows\Newtonsoft.Json.dll
+D:\Projects\dnSpyEx.MCP\Extensions\dnSpyEx.MCP\bin\Release\net8.0-windows\System.ComponentModel.Composition.dll
+D:\Projects\dnSpyEx.MCP\Extensions\dnSpyEx.MCP\obj\Release\net8.0-windows\dnSpyEx..FCE18E12.Up2Date
+D:\Projects\dnSpyEx.MCP\Extensions\dnSpyEx.MCP\obj\Release\net8.0-windows\dnSpyEx.MCP.x.dll
+D:\Projects\dnSpyEx.MCP\Extensions\dnSpyEx.MCP\obj\Release\net8.0-windows\refint\dnSpyEx.MCP.x.dll
+D:\Projects\dnSpyEx.MCP\Extensions\dnSpyEx.MCP\obj\Release\net8.0-windows\dnSpyEx.MCP.x.pdb
+D:\Projects\dnSpyEx.MCP\Extensions\dnSpyEx.MCP\obj\Release\net8.0-windows\ref\dnSpyEx.MCP.x.dll
