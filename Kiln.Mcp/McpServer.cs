@@ -298,7 +298,9 @@ namespace Kiln.Mcp {
 
 			var outputDir = input["outputDir"]?.Value<string>();
 			if (string.IsNullOrWhiteSpace(outputDir))
-				return ToolError(id, "Missing outputDir");
+				outputDir = config.Il2CppDumpDir;
+			if (string.IsNullOrWhiteSpace(outputDir))
+				return ToolError(id, "Missing outputDir (set il2cppDumpDir in kiln.config.json).");
 
 			var dumperPath = input["dumperPath"]?.Value<string>();
 			if (!string.IsNullOrWhiteSpace(dumperPath)) {
@@ -358,7 +360,9 @@ namespace Kiln.Mcp {
 
 			var idbDir = input["idbDir"]?.Value<string>();
 			if (string.IsNullOrWhiteSpace(idbDir))
-				return ToolError(id, "Missing idbDir");
+				idbDir = config.IdaOutputDir;
+			if (string.IsNullOrWhiteSpace(idbDir))
+				return ToolError(id, "Missing idbDir (set idaOutputDir in kiln.config.json).");
 
 			var scriptPath = input["scriptPath"]?.Value<string>();
 			if (!string.IsNullOrWhiteSpace(scriptPath)) {
@@ -550,9 +554,9 @@ Arguments: { ""jobId"": ""..."" }
 - unity_locate
   { ""gameDir"": ""C:\\Games\\Example"" }
 - il2cpp_dump
-  { ""gameDir"": ""C:\\Games\\Example"", ""dumperPath"": ""C:\\Tools\\Il2CppDumper"", ""outputDir"": ""C:\\Kiln\\work\\dump"" }
+  { ""gameDir"": ""C:\\Games\\Example"", ""dumperPath"": ""C:\\Tools\\Il2CppDumper"" }
 - ida_analyze
-  { ""gameDir"": ""C:\\Games\\Example"", ""idaPath"": ""C:\\Program Files\\IDA Professional 9.2\\idat64.exe"", ""idbDir"": ""C:\\Kiln\\work\\ida"" }
+  { ""gameDir"": ""C:\\Games\\Example"", ""idaPath"": ""C:\\Program Files\\IDA Professional 9.2\\idat64.exe"" }
 - ida_export_symbols
   { ""jobId"": ""..."" }
 - ida_export_pseudocode
