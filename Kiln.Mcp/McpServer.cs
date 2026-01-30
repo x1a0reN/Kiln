@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Kiln.Core;
 using Kiln.Plugins.Ida.Pro;
+using Kiln.Plugins.Packaging;
 using Kiln.Plugins.Unity.Il2Cpp;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -194,6 +195,10 @@ namespace Kiln.Mcp {
 				return HandleAnalysisPseudocodeSearch(id, input);
 			if (tool.Method == "analysis.pseudocode.get")
 				return HandleAnalysisPseudocodeGet(id, input);
+			if (tool.Method == "patch_codegen")
+				return HandlePatchCodegen(id, input);
+			if (tool.Method == "package_mod")
+				return HandlePackageMod(id, input);
 
 			await Task.Yield();
 			return ToolError(id, $"Tool not implemented yet: {tool.Name}");
@@ -741,6 +746,61 @@ namespace Kiln.Mcp {
 			}
 
 			return ToolError(id, "Pseudocode not found.");
+		}
+
+		JObject HandlePatchCodegen(JToken? id, JObject input) {
+			var requirements = input["requirements"]?.Value<string>();
+			if (string.IsNullOrWhiteSpace(requirements))
+				return ToolError(id, "Missing requirements");
+
+			var artifactsToken = input["analysisArtifacts"] as JArray;
+			var artifacts = new List<string>();
+			if (artifactsToken is not null) {
+				foreach (var token in artifactsToken) {
+					var value = token?.Value<string>();
+					if (!string.IsNullOrWhiteSpace(value))
+						artifacts.Add(value);
+				}
+			}
+
+			var outputDir = Path.Combine(config.WorkspaceRoot, "patches", DateTime.UtcNow.ToString("yyyyMMdd_HHmmss"));
+			PatchCodegenResult result;
+			try {
+				result = PatchCodegenRunner.Run(requirements, artifacts, outputDir);
+			}
+			catch (Exception ex) {
+				return ToolError(id, $"patch_codegen failed: {ex.Message}");
+			}
+
+			var payload = new JObject {
+				["outputDir"] = result.OutputDir,
+				["files"] = new JArray(result.Files),
+			};
+			return ToolOk(id, payload);
+		}
+
+		JObject HandlePackageMod(JToken? id, JObject input) {
+			var outputDir = input["outputDir"]?.Value<string>();
+			if (string.IsNullOrWhiteSpace(outputDir))
+				return ToolError(id, "Missing outputDir");
+
+			PackageModResult result;
+			try {
+				result = PackageModRunner.Run(outputDir);
+			}
+			catch (Exception ex) {
+				return ToolError(id, $"package_mod failed: {ex.Message}");
+			}
+
+			var payload = new JObject {
+				["outputDir"] = result.OutputDir,
+				["manifestPath"] = result.ManifestPath,
+				["installPath"] = result.InstallPath,
+				["rollbackPath"] = result.RollbackPath,
+				["packagePath"] = result.PackagePath,
+				["payloadFiles"] = new JArray(result.PayloadFiles),
+			};
+			return ToolOk(id, payload);
 		}
 
 		static bool PathsEqual(string left, string right) {

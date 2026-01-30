@@ -35,7 +35,7 @@ dotnet run --project Kiln.Mcp -c Release
 Optional logging:
 - Set `KILN_MCP_LOG` to a file path to capture MCP logs.
 
-## MCP tools (Phase 0 stubs)
+## MCP tools
 - `kiln.help`
 - `kiln.exampleFlow`
 - `workflow.run`
@@ -48,8 +48,39 @@ Optional logging:
 - `ida_analyze`
 - `ida_export_symbols`
 - `ida_export_pseudocode`
+- `analysis.index.build`
+- `analysis.symbols.search`
+- `analysis.symbols.get`
+- `analysis.pseudocode.search`
+- `analysis.pseudocode.get`
 - `patch_codegen`
 - `package_mod`
+
+## analysis.* usage (offline artifacts)
+These tools operate on exported artifacts under `idaOutputDir` (default: `ida/`).
+
+1) Export from IDA (Phase 4):
+```json
+{ "name": "ida_export_symbols", "arguments": { "jobId": "<jobId>" } }
+{ "name": "ida_export_pseudocode", "arguments": { "jobId": "<jobId>" } }
+```
+
+2) Build indexes (optional but faster):
+```json
+{ "name": "analysis.index.build", "arguments": { "jobId": "<jobId>" } }
+```
+
+3) Search symbols and pseudocode:
+```json
+{ "name": "analysis.symbols.search", "arguments": { "jobId": "<jobId>", "query": "Player", "match": "contains", "limit": 20 } }
+{ "name": "analysis.pseudocode.search", "arguments": { "jobId": "<jobId>", "query": "weaponId", "limit": 10, "snippetChars": 300 } }
+```
+
+4) Fetch details:
+```json
+{ "name": "analysis.symbols.get", "arguments": { "jobId": "<jobId>", "name": "Player_Update" } }
+{ "name": "analysis.pseudocode.get", "arguments": { "jobId": "<jobId>", "name": "Player_Update", "maxChars": 4000 } }
+```
 
 ## MCP resources
 - List: `resources/list`
