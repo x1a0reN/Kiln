@@ -21,9 +21,9 @@
 - [x] 产出 .i64/.idb 与日志
 
 ## Phase 4：符号/伪代码导出
-- [ ] ida_export_symbols：函数列表/签名导出
-- [ ] ida_export_pseudocode：伪代码导出（Hex-Rays）
-- [ ] 输出 JSON/文本作为分析上下文
+- [x] ida_export_symbols：函数列表/签名导出
+- [x] ida_export_pseudocode：伪代码导出（Hex-Rays）
+- [x] 输出 JSON/文本作为分析上下文
 
 ## Phase 5：Patch & 打包
 - [ ] patch_codegen：生成 patch / 插件骨架（模板）

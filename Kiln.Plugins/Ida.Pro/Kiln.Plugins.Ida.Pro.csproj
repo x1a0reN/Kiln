@@ -8,6 +8,8 @@
 
   <ItemGroup>
     <None Include="IdaAutoLoadSymbols.py" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="ida_export_symbols.py" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="ida_export_pseudocode.py" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

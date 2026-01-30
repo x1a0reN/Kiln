@@ -102,6 +102,20 @@ namespace Kiln.Plugins.Ida.Pro {
 			return Path.Combine(baseDir, "IdaAutoLoadSymbols.py");
 		}
 
+		public static string GetExportSymbolsScriptPath() {
+			var baseDir = Path.GetDirectoryName(typeof(IdaHeadlessRunner).Assembly.Location);
+			if (string.IsNullOrWhiteSpace(baseDir))
+				baseDir = AppContext.BaseDirectory;
+			return Path.Combine(baseDir, "ida_export_symbols.py");
+		}
+
+		public static string GetExportPseudocodeScriptPath() {
+			var baseDir = Path.GetDirectoryName(typeof(IdaHeadlessRunner).Assembly.Location);
+			if (string.IsNullOrWhiteSpace(baseDir))
+				baseDir = AppContext.BaseDirectory;
+			return Path.Combine(baseDir, "ida_export_pseudocode.py");
+		}
+
 		static string BuildScriptInvocation(string scriptPath, IReadOnlyList<string>? scriptArgs) {
 			var parts = new List<string> { QuoteForIda(scriptPath) };
 			if (scriptArgs is not null) {

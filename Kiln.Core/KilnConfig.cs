@@ -13,7 +13,7 @@ namespace Kiln.Core {
 			var root = ResolveRoot(baseDirectory);
 
 			var defaults = new KilnConfig {
-				Il2CppRootDir = Path.Combine(root, "Il2CppDumper"),
+				Il2CppRootDir = Path.Combine(root, "Tools", "Il2CppDumper"),
 				WorkspaceRoot = Path.Combine(root, "workspace"),
 				IdaOutputDir = Path.Combine(root, "ida"),
 			};
