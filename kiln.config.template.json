@@ -1,5 +1,7 @@
 {
   "idaPath": "D:\\\\Program Files\\\\IDA Professional 9.2\\\\idat64.exe",
+  "idaSymbolsScriptPath": "D:\\\\Tools\\\\Il2CppDumper\\\\ida_with_struct_py3.py",
   "il2cppDumperPath": "D:\\\\Tools\\\\Il2CppDumper",
+  "il2cppDumpDir": "C:\\\\Kiln\\\\il2cpp_dump",
   "workspaceRoot": "C:\\\\Kiln\\\\workspace"
 }

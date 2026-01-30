@@ -107,14 +107,14 @@ namespace Kiln.Mcp {
 					"il2cpp_dump"),
 				new ToolDef(
 					"ida_analyze",
-					"Run IDA headless analysis and apply symbols.",
+					"Run IDA headless analysis and apply symbols/types (auto-load).",
 					new JObject {
 						["type"] = "object",
 						["properties"] = new JObject {
 							["gameDir"] = new JObject { ["type"] = "string" },
 							["idaPath"] = new JObject { ["type"] = "string", ["description"] = "Required; must match kiln.config.json (idaPath)." },
 							["idbDir"] = new JObject { ["type"] = "string" },
-							["scriptPath"] = new JObject { ["type"] = "string", ["description"] = "Optional IDA script to load symbols/types." },
+							["scriptPath"] = new JObject { ["type"] = "string", ["description"] = "Optional; must match kiln.config.json (idaSymbolsScriptPath)." },
 						},
 						["required"] = new JArray("gameDir", "idaPath", "idbDir"),
 						["additionalProperties"] = false,

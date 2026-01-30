@@ -361,6 +361,33 @@ namespace Kiln.Mcp {
 				return ToolError(id, "Missing idbDir");
 
 			var scriptPath = input["scriptPath"]?.Value<string>();
+			if (!string.IsNullOrWhiteSpace(scriptPath)) {
+				if (string.IsNullOrWhiteSpace(config.IdaSymbolsScriptPath))
+					return ToolError(id, "scriptPath override is not allowed; set kiln.config.json (idaSymbolsScriptPath).");
+				if (!PathsEqual(scriptPath, config.IdaSymbolsScriptPath))
+					return ToolError(id, "scriptPath override is not allowed; use the configured idaSymbolsScriptPath.");
+			}
+
+			var symbolScriptPath = config.IdaSymbolsScriptPath;
+			if (string.IsNullOrWhiteSpace(symbolScriptPath))
+				return ToolError(id, "Missing idaSymbolsScriptPath (set kiln.config.json).");
+			if (!File.Exists(symbolScriptPath))
+				return ToolError(id, $"idaSymbolsScriptPath not found: {symbolScriptPath}");
+
+			var dumpDir = config.Il2CppDumpDir;
+			if (string.IsNullOrWhiteSpace(dumpDir))
+				return ToolError(id, "Missing il2cppDumpDir (set kiln.config.json).");
+
+			var scriptJson = Path.Combine(dumpDir, "script.json");
+			var il2cppHeader = Path.Combine(dumpDir, "il2cpp.h");
+			if (!File.Exists(scriptJson))
+				return ToolError(id, $"script.json not found in il2cppDumpDir: {scriptJson}");
+			if (!File.Exists(il2cppHeader))
+				return ToolError(id, $"il2cpp.h not found in il2cppDumpDir: {il2cppHeader}");
+
+			var autoLoadScript = IdaHeadlessRunner.GetAutoLoadScriptPath();
+			if (!File.Exists(autoLoadScript))
+				return ToolError(id, $"Auto-load script not found: {autoLoadScript}");
 
 			var locate = UnityLocator.Locate(gameDir);
 			if (!locate.IsIl2Cpp || string.IsNullOrWhiteSpace(locate.GameAssemblyPath))
@@ -377,7 +404,8 @@ namespace Kiln.Mcp {
 						idaPath,
 						locate.GameAssemblyPath,
 						idbDir,
-						scriptPath,
+						autoLoadScript,
+						new[] { symbolScriptPath, scriptJson, il2cppHeader },
 						context.Token,
 						context.Log).ConfigureAwait(false);
 				}
@@ -524,7 +552,7 @@ Arguments: { ""jobId"": ""..."" }
 - il2cpp_dump
   { ""gameDir"": ""C:\\Games\\Example"", ""dumperPath"": ""C:\\Tools\\Il2CppDumper"", ""outputDir"": ""C:\\Kiln\\work\\dump"" }
 - ida_analyze
-  { ""gameDir"": ""C:\\Games\\Example"", ""idaPath"": ""C:\\Program Files\\IDA Professional 9.2\\idat64.exe"", ""idbDir"": ""C:\\Kiln\\work\\ida"", ""scriptPath"": ""C:\\Kiln\\work\\ida\\apply_symbols.py"" }
+  { ""gameDir"": ""C:\\Games\\Example"", ""idaPath"": ""C:\\Program Files\\IDA Professional 9.2\\idat64.exe"", ""idbDir"": ""C:\\Kiln\\work\\ida"" }
 - ida_export_symbols
   { ""jobId"": ""..."" }
 - ida_export_pseudocode

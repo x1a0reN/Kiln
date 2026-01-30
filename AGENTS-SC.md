@@ -38,6 +38,7 @@
 - 2026-01-30：Phase 2 加固——安全枚举 Unity 文件路径与异步读取 Il2CppDumper 输出。
 - 2026-01-30：Phase 2 安全——限制 il2cpp_dump 仅使用配置的 Il2CppDumper 可执行文件。
 - 2026-01-30：Phase 3 启动——ida_analyze 后台任务 + IDA headless 执行，产出 idb/log，并支持脚本钩子。
+- 2026-01-30：Phase 3 符号——IDA 分析完成后自动加载 Il2CppDumper 符号/类型（包装脚本）。
 
 ## 下一步
 - 实现 Phase 3：IDA headless 分析 + 符号/类型加载。
