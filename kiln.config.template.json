@@ -1,6 +1,6 @@
 {
   "idaPath": "D:\\\\Program Files\\\\IDA Professional 9.2\\\\idat64.exe",
-  "il2cppRootDir": "Il2CppDumper",
+  "il2cppRootDir": "Tools\\\\Il2CppDumper",
   "idaOutputDir": "ida",
   "workspaceRoot": "workspace"
 }

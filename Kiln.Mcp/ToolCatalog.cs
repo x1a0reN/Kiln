@@ -127,6 +127,7 @@ namespace Kiln.Mcp {
 						["type"] = "object",
 						["properties"] = new JObject {
 							["jobId"] = new JObject { ["type"] = "string" },
+							["outputPath"] = new JObject { ["type"] = "string", ["description"] = "Optional; defaults to workspace/<jobId>/ida/symbols.json." },
 						},
 						["required"] = new JArray("jobId"),
 						["additionalProperties"] = false,
@@ -139,6 +140,8 @@ namespace Kiln.Mcp {
 						["type"] = "object",
 						["properties"] = new JObject {
 							["jobId"] = new JObject { ["type"] = "string" },
+							["nameFilter"] = new JObject { ["type"] = "string", ["description"] = "Optional; only export functions containing this substring." },
+							["outputPath"] = new JObject { ["type"] = "string", ["description"] = "Optional; defaults to workspace/<jobId>/ida/pseudocode.json." },
 						},
 						["required"] = new JArray("jobId"),
 						["additionalProperties"] = false,

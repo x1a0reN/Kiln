@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -179,6 +180,10 @@ namespace Kiln.Mcp {
 				return HandleIl2CppDump(id, input);
 			if (tool.Method == "ida_analyze")
 				return HandleIdaAnalyze(id, input);
+			if (tool.Method == "ida_export_symbols")
+				return HandleIdaExportSymbols(id, input);
+			if (tool.Method == "ida_export_pseudocode")
+				return HandleIdaExportPseudocode(id, input);
 
 			await Task.Yield();
 			return ToolError(id, $"Tool not implemented yet: {tool.Name}");
@@ -437,6 +442,80 @@ namespace Kiln.Mcp {
 			return ToolOk(id, payload);
 		}
 
+		JObject HandleIdaExportSymbols(JToken? id, JObject input) {
+			var jobId = input["jobId"]?.Value<string>();
+			if (string.IsNullOrWhiteSpace(jobId))
+				return ToolError(id, "Missing jobId");
+
+			if (!jobManager.TryGetStatus(jobId, out _))
+				return ToolError(id, $"Unknown job: {jobId}");
+
+			var jobDir = Path.Combine(config.WorkspaceRoot, jobId);
+			var analysisDir = Path.Combine(jobDir, "ida");
+			Directory.CreateDirectory(analysisDir);
+
+			var databasePath = FindIdaDatabase(analysisDir);
+			if (string.IsNullOrWhiteSpace(databasePath))
+				return ToolError(id, "IDA database not found (expected .i64/.idb in workspace/job/ida).");
+
+			var exportPath = input["outputPath"]?.Value<string>();
+			if (string.IsNullOrWhiteSpace(exportPath))
+				exportPath = Path.Combine(analysisDir, "symbols.json");
+			var scriptPath = IdaHeadlessRunner.GetExportSymbolsScriptPath();
+			if (!File.Exists(scriptPath))
+				return ToolError(id, $"Export script not found: {scriptPath}");
+
+			var result = RunIdaExport(config.IdaPath, databasePath, scriptPath, exportPath, null);
+			if (!result.Success)
+				return ToolError(id, $"Symbol export failed: {result.StdErr}");
+
+			var payload = new JObject {
+				["outputPath"] = exportPath,
+				["databasePath"] = databasePath,
+				["stdout"] = result.StdOut,
+				["stderr"] = result.StdErr,
+			};
+			return ToolOk(id, payload);
+		}
+
+		JObject HandleIdaExportPseudocode(JToken? id, JObject input) {
+			var jobId = input["jobId"]?.Value<string>();
+			if (string.IsNullOrWhiteSpace(jobId))
+				return ToolError(id, "Missing jobId");
+
+			var nameFilter = input["nameFilter"]?.Value<string>();
+
+			if (!jobManager.TryGetStatus(jobId, out _))
+				return ToolError(id, $"Unknown job: {jobId}");
+
+			var jobDir = Path.Combine(config.WorkspaceRoot, jobId);
+			var analysisDir = Path.Combine(jobDir, "ida");
+			Directory.CreateDirectory(analysisDir);
+
+			var databasePath = FindIdaDatabase(analysisDir);
+			if (string.IsNullOrWhiteSpace(databasePath))
+				return ToolError(id, "IDA database not found (expected .i64/.idb in workspace/job/ida).");
+
+			var exportPath = input["outputPath"]?.Value<string>();
+			if (string.IsNullOrWhiteSpace(exportPath))
+				exportPath = Path.Combine(analysisDir, "pseudocode.json");
+			var scriptPath = IdaHeadlessRunner.GetExportPseudocodeScriptPath();
+			if (!File.Exists(scriptPath))
+				return ToolError(id, $"Export script not found: {scriptPath}");
+
+			var result = RunIdaExport(config.IdaPath, databasePath, scriptPath, exportPath, nameFilter);
+			if (!result.Success)
+				return ToolError(id, $"Pseudocode export failed: {result.StdErr}");
+
+			var payload = new JObject {
+				["outputPath"] = exportPath,
+				["databasePath"] = databasePath,
+				["stdout"] = result.StdOut,
+				["stderr"] = result.StdErr,
+			};
+			return ToolOk(id, payload);
+		}
+
 		static bool PathsEqual(string left, string right) {
 			try {
 				var leftFull = Path.GetFullPath(left)
@@ -448,6 +527,42 @@ namespace Kiln.Mcp {
 			catch {
 				return string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
 			}
+		}
+
+		static IdaAnalyzeResult RunIdaExport(string? idaPath, string databasePath, string scriptPath, string outputPath, string? nameFilter) {
+			if (string.IsNullOrWhiteSpace(idaPath))
+				return new IdaAnalyzeResult(false, -1, databasePath, databasePath, string.Empty, string.Empty, "Missing idaPath.");
+			if (!File.Exists(idaPath))
+				return new IdaAnalyzeResult(false, -1, databasePath, databasePath, string.Empty, string.Empty, $"idaPath not found: {idaPath}");
+
+			var args = new List<string> {
+				outputPath,
+			};
+			if (!string.IsNullOrWhiteSpace(nameFilter))
+				args.Add(nameFilter);
+
+			try {
+				return IdaHeadlessRunner.RunAsync(
+					idaPath,
+					databasePath,
+					Path.GetDirectoryName(databasePath) ?? string.Empty,
+					scriptPath,
+					args,
+					CancellationToken.None).GetAwaiter().GetResult();
+			}
+			catch (Exception ex) {
+				return new IdaAnalyzeResult(false, -1, databasePath, databasePath, string.Empty, string.Empty, ex.Message);
+			}
+		}
+
+		static string? FindIdaDatabase(string analysisDir) {
+			if (!Directory.Exists(analysisDir))
+				return null;
+
+			var i64 = Directory.EnumerateFiles(analysisDir, "*.i64", SearchOption.TopDirectoryOnly).FirstOrDefault();
+			if (!string.IsNullOrWhiteSpace(i64))
+				return i64;
+			return Directory.EnumerateFiles(analysisDir, "*.idb", SearchOption.TopDirectoryOnly).FirstOrDefault();
 		}
 
 		static JObject ToolOk(JToken? id, JToken payload) {
@@ -561,7 +676,7 @@ Arguments: { ""jobId"": ""..."" }
 - ida_export_symbols
   { ""jobId"": ""..."" }
 - ida_export_pseudocode
-  { ""jobId"": ""..."" }
+  { ""jobId"": ""..."", ""nameFilter"": ""Player"" }
 - patch_codegen
   { ""requirements"": ""..."", ""analysisArtifacts"": [""...""] }
 - package_mod

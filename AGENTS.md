@@ -42,6 +42,7 @@
 - 2026-01-30: Phase 3 config — publish-friendly defaults and relative path resolution for dump/ida outputs.
 - 2026-01-30: Phase 3 fixes — robust IDA -S argument handling and dump directory consistency checks.
 - 2026-01-30: Phase 3 config — consolidate Il2CppDumper paths into il2cppRootDir and auto per-game dump dirs.
+- 2026-01-30: Phase 4 export — ida_export_symbols and ida_export_pseudocode emit JSON artifacts.
 
 ## Next Steps
 - Implement Phase 3: IDA headless analysis + symbol/typing load.
