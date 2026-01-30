@@ -16,9 +16,9 @@
 - [x] 输出 dump 目录 + 结构/映射文件
 
 ## Phase 3：IDA Headless 分析
-- [ ] ida_analyze：idat64 -A -S 批处理分析
+- [x] ida_analyze：idat64 -A -S 批处理分析
 - [ ] 自动加载符号/类型信息
-- [ ] 产出 .i64/.idb 与日志
+- [x] 产出 .i64/.idb 与日志
 
 ## Phase 4：符号/伪代码导出
 - [ ] ida_export_symbols：函数列表/签名导出

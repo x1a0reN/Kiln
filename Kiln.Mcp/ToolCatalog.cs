@@ -112,8 +112,9 @@ namespace Kiln.Mcp {
 						["type"] = "object",
 						["properties"] = new JObject {
 							["gameDir"] = new JObject { ["type"] = "string" },
-							["idaPath"] = new JObject { ["type"] = "string" },
+							["idaPath"] = new JObject { ["type"] = "string", ["description"] = "Required; must match kiln.config.json (idaPath)." },
 							["idbDir"] = new JObject { ["type"] = "string" },
+							["scriptPath"] = new JObject { ["type"] = "string", ["description"] = "Optional IDA script to load symbols/types." },
 						},
 						["required"] = new JArray("gameDir", "idaPath", "idbDir"),
 						["additionalProperties"] = false,
