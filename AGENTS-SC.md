@@ -61,6 +61,7 @@
 - 2026-01-30：新增独立仓库 README（构建/运行与二进制依赖说明），并移除旧 dnSpyEx.MCP fork 的远端以避免混淆。
 - 2026-01-30：bridge 新增 MCP 资源支持（resources/list、resources/read），内置 BepInEx 文档资源库。
 - 2026-01-30：新增 dnSpyEx MCP 资源索引文档（dnspyex://docs/resource-index），用于引导 AI 客户端读取资源。
+- 2026-01-30：移除 Tools 根目录中的旧 bridge 文件，bridge 仅保留在 Tools\dnSpyEx.MCP.Bridge。
 
 ## 下一步
 - 构建并确认两个项目可正常编译。
