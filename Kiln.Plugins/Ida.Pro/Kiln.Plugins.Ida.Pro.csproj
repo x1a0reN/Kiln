@@ -6,4 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <ItemGroup>
+    <None Include="IdaAutoLoadSymbols.py" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

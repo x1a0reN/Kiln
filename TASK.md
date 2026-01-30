@@ -17,7 +17,7 @@
 
 ## Phase 3：IDA Headless 分析
 - [x] ida_analyze：idat64 -A -S 批处理分析
-- [ ] 自动加载符号/类型信息
+- [x] 自动加载符号/类型信息
 - [x] 产出 .i64/.idb 与日志
 
 ## Phase 4：符号/伪代码导出

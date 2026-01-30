@@ -38,6 +38,10 @@
 - 2026-01-30: Phase 2 hardening — safe Unity file enumeration and async Il2CppDumper output reads.
 - 2026-01-30: Phase 2 security — restrict il2cpp_dump to configured Il2CppDumper executable.
 - 2026-01-30: Phase 3 kickoff — ida_analyze job runner with IDA headless execution, idb/log output, optional script hook.
+- 2026-01-30: Phase 3 symbols — auto-load Il2CppDumper symbols/types after IDA analysis via wrapper script.
+- 2026-01-30: Phase 3 config — publish-friendly defaults and relative path resolution for dump/ida outputs.
+- 2026-01-30: Phase 3 fixes — robust IDA -S argument handling and dump directory consistency checks.
+- 2026-01-30: Phase 3 config — consolidate Il2CppDumper paths into il2cppRootDir and auto per-game dump dirs.
 
 ## Next Steps
 - Implement Phase 3: IDA headless analysis + symbol/typing load.

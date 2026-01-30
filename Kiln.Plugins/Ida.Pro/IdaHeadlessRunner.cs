@@ -12,6 +12,7 @@ namespace Kiln.Plugins.Ida.Pro {
 			string inputBinaryPath,
 			string outputDir,
 			string? scriptPath,
+			IReadOnlyList<string>? scriptArgs,
 			CancellationToken token,
 			Action<string>? log = null) {
 			if (string.IsNullOrWhiteSpace(idaPath) || !File.Exists(idaPath))
@@ -35,18 +36,19 @@ namespace Kiln.Plugins.Ida.Pro {
 			};
 
 			if (!string.IsNullOrWhiteSpace(scriptPath))
-				args.Add($"-S\"{scriptPath}\"");
+				args.Add($"-S{BuildScriptInvocation(scriptPath, scriptArgs)}");
 
 			args.Add($"\"{inputBinaryPath}\"");
 
 			var psi = new ProcessStartInfo {
 				FileName = idaPath,
-				Arguments = string.Join(" ", args),
 				UseShellExecute = false,
 				RedirectStandardOutput = true,
 				RedirectStandardError = true,
 				CreateNoWindow = true,
 			};
+			foreach (var arg in args)
+				psi.ArgumentList.Add(arg);
 
 			using var process = new Process { StartInfo = psi };
 			if (!process.Start())
@@ -91,6 +93,27 @@ namespace Kiln.Plugins.Ida.Pro {
 				stdout,
 				stderr
 			);
+		}
+
+		public static string GetAutoLoadScriptPath() {
+			var baseDir = Path.GetDirectoryName(typeof(IdaHeadlessRunner).Assembly.Location);
+			if (string.IsNullOrWhiteSpace(baseDir))
+				baseDir = AppContext.BaseDirectory;
+			return Path.Combine(baseDir, "IdaAutoLoadSymbols.py");
+		}
+
+		static string BuildScriptInvocation(string scriptPath, IReadOnlyList<string>? scriptArgs) {
+			var parts = new List<string> { QuoteForIda(scriptPath) };
+			if (scriptArgs is not null) {
+				foreach (var arg in scriptArgs)
+					parts.Add(QuoteForIda(arg));
+			}
+			return string.Join(" ", parts);
+		}
+
+		static string QuoteForIda(string value) {
+			var escaped = value.Replace("\"", "\\\"");
+			return $"\"{escaped}\"";
 		}
 	}
 }
