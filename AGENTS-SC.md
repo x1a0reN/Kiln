@@ -19,6 +19,7 @@
 - Tools\dnSpyEx.MCP.Bridge\Program.cs：bridge 入口；运行 MCP 循环（按需连接管道）。
 - Tools\dnSpyEx.MCP.Bridge\McpServer.cs：MCP JSON-RPC（initialize/tools/*）；转发工具调用到管道。
 - Tools\dnSpyEx.MCP.Bridge\ToolCatalog.cs：工具定义与输入 schema，映射到 RPC 方法。
+- Tools\dnSpyEx.MCP.Bridge\ResourceCatalog.cs：内置 MCP 资源（BepInEx 文档），并支持 resources/list 与 resources/read。
 - Tools\dnSpyEx.MCP.Bridge\PipeClient.cs：NamedPipe 客户端（按行 JSON），延迟连接带超时。
 - Tools\dnSpyEx.MCP.Bridge\McpPipeDefaults.cs：管道名常量与环境变量名。
 - dnSpyEx.MCP.slnx：只包含 dnSpyEx.MCP 与 dnSpyEx.MCP.Bridge 的解决方案。
@@ -58,6 +59,7 @@
 - 2026-01-30：新增 dnSpyEx.MCP.slnx，简化 DnSpyCommon.props（移除构建任务导入），固定独立构建走 DnSpyExBin；补充 .gitignore。
 - 2026-01-30：清理独立仓库结构（保留 Extensions\dnSpyEx.MCP）并移除已跟踪构建产物；扩展 .gitignore 覆盖 bin/obj。
 - 2026-01-30：新增独立仓库 README（构建/运行与二进制依赖说明），并移除旧 dnSpyEx.MCP fork 的远端以避免混淆。
+- 2026-01-30：bridge 新增 MCP 资源支持（resources/list、resources/read），内置 BepInEx 文档资源库。
 
 ## 下一步
 - 构建并确认两个项目可正常编译。

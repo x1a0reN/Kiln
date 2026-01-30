@@ -19,6 +19,7 @@
 - Tools\dnSpyEx.MCP.Bridge\Program.cs: Bridge entrypoint; runs MCP loop (pipe connects on demand).
 - Tools\dnSpyEx.MCP.Bridge\McpServer.cs: MCP JSON-RPC (initialize/tools/*); forwards tool calls to pipe.
 - Tools\dnSpyEx.MCP.Bridge\ToolCatalog.cs: Tool definitions and input schemas mapped to RPC methods.
+- Tools\dnSpyEx.MCP.Bridge\ResourceCatalog.cs: Embedded MCP resources (BepInEx docs) and resource list/read support.
 - Tools\dnSpyEx.MCP.Bridge\PipeClient.cs: NamedPipe client (line-delimited JSON), lazy connect with timeout.
 - Tools\dnSpyEx.MCP.Bridge\McpPipeDefaults.cs: Pipe name constants and env var name.
 - dnSpyEx.MCP.slnx: Solution containing dnSpyEx.MCP and dnSpyEx.MCP.Bridge only.
@@ -59,6 +60,7 @@
 - 2026-01-30: Added dnSpyEx.MCP.slnx, simplified DnSpyCommon.props (removed build task import), and pinned standalone builds to dnSpyExBin references; added .gitignore for bridge logs.
 - 2026-01-30: Cleaned standalone repo layout (kept Extensions\dnSpyEx.MCP) and removed tracked build artifacts; expanded .gitignore to cover bin/obj.
 - 2026-01-30: Added standalone README (build/run + binary dependency notes) and removed remotes from the legacy dnSpyEx.MCP fork to avoid confusion.
+- 2026-01-30: Added MCP resources support in the bridge (resources/list, resources/read) with embedded BepInEx documentation.
 
 ## Next Steps
 - Build the solution and confirm both projects compile.

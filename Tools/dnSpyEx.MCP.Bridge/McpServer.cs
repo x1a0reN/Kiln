@@ -9,10 +9,12 @@ namespace dnSpyEx.MCP.Bridge {
 	sealed class McpServer {
 		readonly PipeClient pipe;
 		readonly ToolCatalog catalog;
+		readonly ResourceCatalog resources;
 
 		public McpServer(PipeClient pipe) {
 			this.pipe = pipe ?? throw new ArgumentNullException(nameof(pipe));
 			catalog = new ToolCatalog();
+			resources = new ResourceCatalog();
 		}
 
 		public async Task RunAsync(CancellationToken token) {
@@ -53,6 +55,10 @@ namespace dnSpyEx.MCP.Bridge {
 				return ToolsList(id);
 			if (method == "tools/call")
 				return await ToolsCallAsync(request, id, token).ConfigureAwait(false);
+			if (method == "resources/list")
+				return ResourcesList(id);
+			if (method == "resources/read")
+				return ResourcesRead(request, id);
 			if (method == "notifications/initialized")
 				return null;
 
@@ -65,6 +71,7 @@ namespace dnSpyEx.MCP.Bridge {
 				["protocolVersion"] = protocolVersion,
 				["capabilities"] = new JObject {
 					["tools"] = new JObject(),
+					["resources"] = new JObject(),
 				},
 				["serverInfo"] = new JObject {
 					["name"] = "dnSpyEx.MCP.Bridge",
@@ -82,6 +89,38 @@ namespace dnSpyEx.MCP.Bridge {
 					["inputSchema"] = tool.InputSchema,
 				});
 			return MakeResult(id, new JObject { ["tools"] = new JArray(tools) });
+		}
+
+		JObject ResourcesList(JToken? id) {
+			var list = resources.GetResources()
+				.Select(resource => new JObject {
+					["uri"] = resource.Uri,
+					["name"] = resource.Name,
+					["description"] = resource.Description,
+					["mimeType"] = resource.MimeType,
+				});
+			return MakeResult(id, new JObject { ["resources"] = new JArray(list) });
+		}
+
+		JObject ResourcesRead(JObject request, JToken? id) {
+			var args = request["params"] as JObject;
+			var uri = args?["uri"]?.Value<string>();
+			if (string.IsNullOrWhiteSpace(uri))
+				return MakeError(id, -32602, "Missing resource uri");
+
+			var content = resources.ReadResource(uri);
+			if (content is null)
+				return MakeError(id, -32602, $"Unknown resource: {uri}");
+
+			return MakeResult(id, new JObject {
+				["contents"] = new JArray {
+					new JObject {
+						["uri"] = uri,
+						["mimeType"] = "text/markdown",
+						["text"] = content,
+					},
+				},
+			});
 		}
 
 		async Task<JObject> ToolsCallAsync(JObject request, JToken? id, CancellationToken token) {
@@ -202,7 +241,8 @@ Common flow:
 Notes:
 - namespace parameter can be empty string for global namespace.
 - token/typeToken are uint metadata tokens from listTypes/listMembers.
-- dnspy.decompile only supports method|field|property|event (no full type output).";
+- dnspy.decompile only supports method|field|property|event (no full type output).
+- MCP resources are available via resources/list and resources/read (BepInEx docs).";
 
 		const string ExampleFlowText =
 @"dnSpyEx MCP example flow (detailed)
@@ -285,6 +325,12 @@ Returns: hasViewer, isEmpty, caretPosition, text.
 
 Tips:
 - Always call dnspy.exampleFlow first for full examples.
-- Use moduleMvid + token/typeToken from previous list calls.";
+- Use moduleMvid + token/typeToken from previous list calls.
+
+9) MCP resources (BepInEx docs)
+- List resources:
+  resources/list
+- Read a resource:
+  resources/read { ""uri"": ""bepinex://docs/il2cpp-guide"" }";
 	}
 }
