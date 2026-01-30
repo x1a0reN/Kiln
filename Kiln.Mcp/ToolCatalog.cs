@@ -127,7 +127,7 @@ namespace Kiln.Mcp {
 						["type"] = "object",
 						["properties"] = new JObject {
 							["jobId"] = new JObject { ["type"] = "string" },
-							["outputPath"] = new JObject { ["type"] = "string", ["description"] = "Optional; defaults to workspace/<jobId>/ida/symbols.json." },
+							["outputPath"] = new JObject { ["type"] = "string", ["description"] = "Optional; defaults to idaOutputDir/symbols.json." },
 						},
 						["required"] = new JArray("jobId"),
 						["additionalProperties"] = false,
@@ -141,12 +141,93 @@ namespace Kiln.Mcp {
 						["properties"] = new JObject {
 							["jobId"] = new JObject { ["type"] = "string" },
 							["nameFilter"] = new JObject { ["type"] = "string", ["description"] = "Optional; only export functions containing this substring." },
-							["outputPath"] = new JObject { ["type"] = "string", ["description"] = "Optional; defaults to workspace/<jobId>/ida/pseudocode.json." },
+							["outputPath"] = new JObject { ["type"] = "string", ["description"] = "Optional; defaults to idaOutputDir/pseudocode.json." },
 						},
 						["required"] = new JArray("jobId"),
 						["additionalProperties"] = false,
 					},
 					"ida_export_pseudocode"),
+				new ToolDef(
+					"analysis.index.build",
+					"Build local indexes for symbols and pseudocode exports.",
+					new JObject {
+						["type"] = "object",
+						["properties"] = new JObject {
+							["jobId"] = new JObject { ["type"] = "string" },
+						},
+						["required"] = new JArray("jobId"),
+						["additionalProperties"] = false,
+					},
+					"analysis.index.build"),
+				new ToolDef(
+					"analysis.symbols.search",
+					"Search exported symbols by name.",
+					new JObject {
+						["type"] = "object",
+						["properties"] = new JObject {
+							["jobId"] = new JObject { ["type"] = "string" },
+							["query"] = new JObject { ["type"] = "string" },
+							["match"] = new JObject { ["type"] = "string", ["description"] = "exact|contains" },
+							["caseSensitive"] = new JObject { ["type"] = "boolean" },
+							["limit"] = new JObject { ["type"] = "integer" },
+							["offset"] = new JObject { ["type"] = "integer" },
+							["fields"] = new JObject {
+								["type"] = "array",
+								["items"] = new JObject { ["type"] = "string" },
+							},
+						},
+						["required"] = new JArray("jobId", "query"),
+						["additionalProperties"] = false,
+					},
+					"analysis.symbols.search"),
+				new ToolDef(
+					"analysis.symbols.get",
+					"Get a symbol by name or address.",
+					new JObject {
+						["type"] = "object",
+						["properties"] = new JObject {
+							["jobId"] = new JObject { ["type"] = "string" },
+							["name"] = new JObject { ["type"] = "string" },
+							["ea"] = new JObject { ["type"] = "string" },
+							["caseSensitive"] = new JObject { ["type"] = "boolean" },
+						},
+						["required"] = new JArray("jobId"),
+						["additionalProperties"] = false,
+					},
+					"analysis.symbols.get"),
+				new ToolDef(
+					"analysis.pseudocode.search",
+					"Search in exported pseudocode and return snippets.",
+					new JObject {
+						["type"] = "object",
+						["properties"] = new JObject {
+							["jobId"] = new JObject { ["type"] = "string" },
+							["query"] = new JObject { ["type"] = "string" },
+							["match"] = new JObject { ["type"] = "string", ["description"] = "exact|contains" },
+							["caseSensitive"] = new JObject { ["type"] = "boolean" },
+							["limit"] = new JObject { ["type"] = "integer" },
+							["snippetChars"] = new JObject { ["type"] = "integer" },
+						},
+						["required"] = new JArray("jobId", "query"),
+						["additionalProperties"] = false,
+					},
+					"analysis.pseudocode.search"),
+				new ToolDef(
+					"analysis.pseudocode.get",
+					"Get pseudocode for a function by name or address.",
+					new JObject {
+						["type"] = "object",
+						["properties"] = new JObject {
+							["jobId"] = new JObject { ["type"] = "string" },
+							["name"] = new JObject { ["type"] = "string" },
+							["ea"] = new JObject { ["type"] = "string" },
+							["caseSensitive"] = new JObject { ["type"] = "boolean" },
+							["maxChars"] = new JObject { ["type"] = "integer" },
+						},
+						["required"] = new JArray("jobId"),
+						["additionalProperties"] = false,
+					},
+					"analysis.pseudocode.get"),
 				new ToolDef(
 					"patch_codegen",
 					"Generate patch/plugin template from requirements and analysis artifacts.",
