@@ -23,7 +23,7 @@ dnSpyEx MCP extension and stdio bridge that expose local decompilation tools to 
 
 默认二进制目录（可覆盖）：
 ```
-D:\逆向\工具-逆向\dnspyEx\bin
+C:\Path\dnSpyEx\bin
 ```
 
 ## 构建
@@ -39,18 +39,18 @@ dotnet build Tools\dnSpyEx.MCP.Bridge\dnSpyEx.MCP.Bridge.csproj -c Release -f ne
 
 指定 dnSpyEx 二进制路径（若安装路径不同）：
 ```
-dotnet build Extensions\dnSpyEx.MCP\dnSpyEx.MCP.csproj -c Release -f net10.0-windows -p:DnSpyExBin="D:\你的路径\dnSpyEx\bin"
+dotnet build Extensions\dnSpyEx.MCP\dnSpyEx.MCP.csproj -c Release -f net10.0-windows -p:DnSpyExBin="C:\Path\dnSpyEx\bin"
 ```
 
 插件默认会自动复制到 dnSpyEx 扩展目录；如需自定义扩展目录：
 ```
--p:DnSpyExInstallDir="D:\你的路径\dnSpyEx\bin\Extensions"
+-p:DnSpyExInstallDir="C:\Path\dnSpyEx\bin\Extensions"
 ```
 
 ## 运行
 1) 启动 dnSpyEx：
 ```
-D:\逆向\工具-逆向\dnspyEx\bin\dnSpy.exe
+C:\Path\dnSpyEx\bin\dnSpy.exe
 ```
 
 2) 启动 MCP bridge：

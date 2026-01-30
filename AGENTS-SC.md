@@ -2,7 +2,7 @@
 
 ## 背景
 - 目标：构建 dnSpyEx 的 MCP 插件，提供本地 IPC 服务器与 stdio bridge，让 MCP 客户端可与 dnSpyEx UI 通信。
-- 仓库：D:\Projects\dnSpyEx.MCP.Standalone
+- 仓库：<repo-root>
 
 ## 目标架构
 - dnSpyEx 插件内置本地 IPC（优先 NamedPipe，可选 HTTP）。
@@ -42,7 +42,7 @@
 - 2026-01-29：新增 Output 日志与对 BamlTabSaver NullReferenceException 的定向抑制；在 BamlTabSaver 加入空引用保护。
 - 2026-01-29：bridge 改为首次工具调用时才连接管道（懒连接），失败时重置管道，避免启动即报 “Pipe hasn't been connected yet”。
 - 2026-01-29：插件端新增管道读写错误日志；bridge 侧对“断开的管道”做一次重连重试以缓解偶发错误。
-- 2026-01-29：插件构建默认自动复制 dnSpyEx.MCP.x.dll 到 D:\逆向\工具-逆向\dnspyEx\bin\Extensions（如需可通过 DnSpyExInstallDir 覆盖）。
+- 2026-01-29：插件构建默认自动复制 dnSpyEx.MCP.x.dll 到 C:\Path\dnSpyEx\bin\Extensions（如需可通过 DnSpyExInstallDir 覆盖）。
 - 2026-01-29：新增 NamedPipe 安全设置（仅当前用户）与服务端创建错误处理；移除强制完整性标签以避免权限错误，并修复退出时由 TimeSpan.FromSeconds(long) 触发的崩溃。
 - 2026-01-29：服务端允许多个 NamedPipe 客户端并行连接（最大实例数），避免旧连接占用导致新连接超时。
 - 2026-01-29：新增更详细的管道 I/O 日志（按客户端记录请求/EOF/错误），用于定位 “Pipe closed” 早退问题。
@@ -63,6 +63,7 @@
 - 2026-01-30：新增 dnSpyEx MCP 资源索引文档（dnspyex://docs/resource-index），用于引导 AI 客户端读取资源。
 - 2026-01-30：移除 Tools 根目录中的旧 bridge 文件，bridge 仅保留在 Tools\dnSpyEx.MCP.Bridge。
 - 2026-01-30：面向发布重写 README，加入英文描述与多客户端 MCP 配置示例。
+- 2026-01-30：对 README 与 AGENTS 路径脱敏，移除个人目录名。
 
 ## 下一步
 - 构建并确认两个项目可正常编译。
@@ -90,7 +91,7 @@ dotnet build Tools\dnSpyEx.MCP.Bridge\dnSpyEx.MCP.Bridge.csproj -c Release -f ne
 ### 运行 dnSpyEx + MCP bridge
 1) 启动 dnSpyEx（已安装 net10 构建）：
 ```
-D:\逆向\工具-逆向\dnspyEx\bin\dnSpy.exe
+C:\Path\dnSpyEx\bin\dnSpy.exe
 ```
 
 2) 启动 MCP bridge：
@@ -153,8 +154,8 @@ dotnet run --project Tools/dnSpyEx.MCP.Bridge -c Release
 ## 备注
 - 用户要求每次更新都记录进度到 AGENTS.md。
 - 用户确认仅使用 .NET 10；构建命令保持自动复制开启（不要设置 DisableDnSpyExInstallCopy）。
-- 工作目录：D:\Projects\dnSpyEx.MCP.Standalone
-- 参考源码目录（只读）：D:\Projects\dnSpyEx.MCP
+- 工作目录：<repo-root>
+- 参考源码目录（只读）：<dnSpyEx-source-path>
 
 ## 规则
 - 每次改动后确认构建无错误，然后提交并推送。

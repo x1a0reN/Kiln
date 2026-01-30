@@ -2,7 +2,7 @@
 
 ## Background
 - Goal: build a dnSpyEx MCP plugin with a local IPC server and a stdio bridge so MCP clients can talk to dnSpyEx UI.
-- Repo: D:\Projects\dnSpyEx.MCP.Standalone
+- Repo: <repo-root>
 
 ## Target Architecture
 - dnSpyEx plugin hosts a local IPC server (NamedPipe preferred; HTTP optional).
@@ -43,7 +43,7 @@
 - 2026-01-29: Added output logging and a targeted suppression for BamlTabSaver NullReferenceException; added a null-guard in BamlTabSaver.
 - 2026-01-29: Bridge now connects to the pipe on first tool call (lazy connect) and resets the pipe on failures to avoid early "Pipe hasn't been connected yet" exits.
 - 2026-01-29: Added pipe read/write error logging on the plugin side and a one-time reconnect retry in the bridge to mitigate transient broken-pipe errors.
-- 2026-01-29: Plugin build auto-copies dnSpyEx.MCP.x.dll into D:\逆向\工具-逆向\dnspyEx\bin\Extensions by default (override DnSpyExInstallDir if needed).
+- 2026-01-29: Plugin build auto-copies dnSpyEx.MCP.x.dll into C:\Path\dnSpyEx\bin\Extensions by default (override DnSpyExInstallDir if needed).
 - 2026-01-29: Added explicit NamedPipe security (current user) and server-side creation error handling; removed mandatory label to avoid privilege errors and fixed a shutdown crash from TimeSpan.FromSeconds(long).
 - 2026-01-29: Server now accepts multiple concurrent NamedPipe clients (max instances) and handles connections in parallel to avoid timeouts when a stale client holds the only slot.
 - 2026-01-29: Added detailed pipe I/O logging (per-client request/EOF/errors) to diagnose early disconnects causing "Pipe closed" in the bridge.
@@ -64,6 +64,7 @@
 - 2026-01-30: Added dnSpyEx MCP resource index document (dnspyex://docs/resource-index) to guide AI clients.
 - 2026-01-30: Removed legacy bridge files from Tools root so the bridge lives only under Tools\dnSpyEx.MCP.Bridge.
 - 2026-01-30: Refreshed README for public release, added English description and MCP client config examples.
+- 2026-01-30: Sanitized README and AGENTS paths to remove personal directory names.
 
 ## Next Steps
 - Build the solution and confirm both projects compile.
@@ -90,7 +91,7 @@ Note:
 ### Run dnSpyEx + MCP bridge
 1) Start dnSpyEx (installed net10 build):
 ```
-D:\逆向\工具-逆向\dnspyEx\bin\dnSpy.exe
+C:\Path\dnSpyEx\bin\dnSpy.exe
 ```
 
 2) Start the MCP bridge:
@@ -153,8 +154,8 @@ Workflow:
 ## Notes
 - User wants progress tracked in AGENTS.md on each update.
 - User confirms only .NET 10 builds; build commands should keep auto-copy enabled (do not set DisableDnSpyExInstallCopy).
-- Working directory: D:\Projects\dnSpyEx.MCP.Standalone
-- Reference source directory (read-only): D:\Projects\dnSpyEx.MCP
+- Working directory: <repo-root>
+- Reference source directory (read-only): <dnSpyEx-source-path>
 
 ## Rules
 - After each change, confirm build succeeds with no errors, then git commit and push to the repo.
