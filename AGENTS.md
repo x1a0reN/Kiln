@@ -63,6 +63,7 @@
 - 2026-01-30: Added MCP resources support in the bridge (resources/list, resources/read) with embedded BepInEx documentation.
 - 2026-01-30: Added dnSpyEx MCP resource index document (dnspyex://docs/resource-index) to guide AI clients.
 - 2026-01-30: Removed legacy bridge files from Tools root so the bridge lives only under Tools\dnSpyEx.MCP.Bridge.
+- 2026-01-30: Refreshed README for public release, added English description and MCP client config examples.
 
 ## Next Steps
 - Build the solution and confirm both projects compile.
