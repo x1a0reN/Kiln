@@ -36,6 +36,7 @@
 - 2026-01-30：Phase 2 完成——新增 Unity IL2CPP 定位与 Il2CppDumper 调用，接入 detect_engine/unity_locate/il2cpp_dump MCP 接口（支持配置默认 dumper 路径）。
 - 2026-01-30：Phase 2 已验证——仓库清理完成且 Release 构建通过。
 - 2026-01-30：Phase 2 加固——安全枚举 Unity 文件路径与异步读取 Il2CppDumper 输出。
+- 2026-01-30：Phase 2 安全——限制 il2cpp_dump 仅使用配置的 Il2CppDumper 可执行文件。
 
 ## 下一步
 - 实现 Phase 3：IDA headless 分析 + 符号/类型加载。

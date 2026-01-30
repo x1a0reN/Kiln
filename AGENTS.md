@@ -36,6 +36,7 @@
 - 2026-01-30: Phase 2 complete — added Unity IL2CPP locate + Il2CppDumper runner, and wired detect_engine/unity_locate/il2cpp_dump MCP handlers (configurable dumper path).
 - 2026-01-30: Phase 2 verified — repo cleanup and Release build succeeded.
 - 2026-01-30: Phase 2 hardening — safe Unity file enumeration and async Il2CppDumper output reads.
+- 2026-01-30: Phase 2 security — restrict il2cpp_dump to configured Il2CppDumper executable.
 
 ## Next Steps
 - Implement Phase 3: IDA headless analysis + symbol/typing load.

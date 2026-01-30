@@ -53,7 +53,7 @@ namespace Kiln.Plugins.Unity.Il2Cpp {
 
 		static string? ResolveDumperExecutable(string dumperPath) {
 			if (File.Exists(dumperPath))
-				return dumperPath;
+				return IsIl2CppDumperExecutable(dumperPath) ? dumperPath : null;
 
 			if (!Directory.Exists(dumperPath))
 				return null;
@@ -62,6 +62,11 @@ namespace Kiln.Plugins.Unity.Il2Cpp {
 				.FirstOrDefault();
 
 			return exe;
+		}
+
+		static bool IsIl2CppDumperExecutable(string path) {
+			var fileName = Path.GetFileName(path);
+			return string.Equals(fileName, "Il2CppDumper.exe", StringComparison.OrdinalIgnoreCase);
 		}
 	}
 }

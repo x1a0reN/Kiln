@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -297,8 +298,13 @@ namespace Kiln.Mcp {
 				return ToolError(id, "Missing outputDir");
 
 			var dumperPath = input["dumperPath"]?.Value<string>();
-			if (string.IsNullOrWhiteSpace(dumperPath))
-				dumperPath = config.Il2CppDumperPath;
+			if (!string.IsNullOrWhiteSpace(dumperPath)) {
+				if (string.IsNullOrWhiteSpace(config.Il2CppDumperPath))
+					return ToolError(id, "dumperPath override is not allowed; set kiln.config.json (il2cppDumperPath).");
+				if (!PathsEqual(dumperPath, config.Il2CppDumperPath))
+					return ToolError(id, "dumperPath override is not allowed; use the configured il2cppDumperPath.");
+			}
+			dumperPath = config.Il2CppDumperPath;
 
 			if (string.IsNullOrWhiteSpace(dumperPath))
 				return ToolError(id, "Missing dumperPath (and no default in kiln.config.json)");
@@ -326,6 +332,19 @@ namespace Kiln.Mcp {
 			};
 
 			return ToolOk(id, payload);
+		}
+
+		static bool PathsEqual(string left, string right) {
+			try {
+				var leftFull = Path.GetFullPath(left)
+					.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+				var rightFull = Path.GetFullPath(right)
+					.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+				return string.Equals(leftFull, rightFull, StringComparison.OrdinalIgnoreCase);
+			}
+			catch {
+				return string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
+			}
 		}
 
 		static JObject ToolOk(JToken? id, JToken payload) {
