@@ -24,9 +24,7 @@ namespace Kiln.Plugins.Ida.Pro {
 
 			Directory.CreateDirectory(outputDir);
 
-			var is64 = string.Equals(Path.GetFileName(idaPath), "idat64.exe", StringComparison.OrdinalIgnoreCase);
-			var dbExt = is64 ? ".i64" : ".idb";
-			var dbPath = Path.Combine(outputDir, Path.GetFileNameWithoutExtension(inputBinaryPath) + dbExt);
+			var dbPath = GetDatabasePath(idaPath, inputBinaryPath, outputDir);
 			var logPath = Path.Combine(outputDir, "ida.log");
 
 			var args = new List<string> {
@@ -114,6 +112,12 @@ namespace Kiln.Plugins.Ida.Pro {
 			if (string.IsNullOrWhiteSpace(baseDir))
 				baseDir = AppContext.BaseDirectory;
 			return Path.Combine(baseDir, "ida_export_pseudocode.py");
+		}
+
+		public static string GetDatabasePath(string idaPath, string inputBinaryPath, string outputDir) {
+			var is64 = string.Equals(Path.GetFileName(idaPath), "idat64.exe", StringComparison.OrdinalIgnoreCase);
+			var dbExt = is64 ? ".i64" : ".idb";
+			return Path.Combine(outputDir, Path.GetFileNameWithoutExtension(inputBinaryPath) + dbExt);
 		}
 
 		static string BuildScriptInvocation(string scriptPath, IReadOnlyList<string>? scriptArgs) {

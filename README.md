@@ -82,6 +82,8 @@ These tools operate on exported artifacts under `idaOutputDir` (default: `ida/`)
 { "name": "analysis.pseudocode.get", "arguments": { "jobId": "<jobId>", "name": "Player_Update", "maxChars": 4000 } }
 ```
 
+Tip: if `idaOutputDir` already contains a matching `.i64/.idb`, `ida_analyze` can skip analysis by passing `reuseExisting: true`.
+
 ## MCP resources
 - List: `resources/list`
 - Read: `resources/read` with `{ "uri": "<resource-uri>" }`
