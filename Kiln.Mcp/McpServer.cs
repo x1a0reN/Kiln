@@ -398,7 +398,7 @@ namespace Kiln.Mcp {
 			var expectedDb = string.Empty;
 			if (!string.IsNullOrWhiteSpace(locate.GameAssemblyPath))
 				expectedDb = IdaHeadlessRunner.GetDatabasePath(idaPath, locate.GameAssemblyPath, idbDir);
-			var existingDb = !string.IsNullOrWhiteSpace(expectedDb) && File.Exists(expectedDb)
+			var existingDb = !string.IsNullOrWhiteSpace(expectedDb) && File.Exists(expectedDb) && MetaMatchesExpectedDb(expectedDb, locate)
 				? expectedDb
 				: null;
 
@@ -473,6 +473,7 @@ namespace Kiln.Mcp {
 
 				if (result.Success) {
 					context.Log($"IDA analysis completed. Database: {result.DatabasePath}");
+					TryWriteDbMeta(result.DatabasePath, locate);
 					context.Update(JobState.Completed, "completed", 100, null);
 				}
 				else {
@@ -1081,6 +1082,73 @@ namespace Kiln.Mcp {
 			var length = Math.Min(snippetChars, text.Length - start);
 			return text.Substring(start, length);
 		}
+
+		static bool MetaMatchesExpectedDb(string databasePath, UnityLocateResult locate) {
+			if (string.IsNullOrWhiteSpace(locate.GameAssemblyPath))
+				return false;
+
+			var metaPath = GetDbMetaPath(databasePath);
+			if (!File.Exists(metaPath))
+				return false;
+
+			try {
+				var metaJson = JObject.Parse(File.ReadAllText(metaPath));
+				var metaGameDir = metaJson["gameDir"]?.Value<string>();
+				var metaGameAssembly = metaJson["gameAssemblyPath"]?.Value<string>();
+				var metaSize = metaJson["gameAssemblySize"]?.Value<long?>() ?? -1;
+				var metaTicks = metaJson["gameAssemblyLastWriteUtcTicks"]?.Value<long?>() ?? -1;
+
+				var currentAssembly = Path.GetFullPath(locate.GameAssemblyPath);
+				var currentDir = Path.GetFullPath(locate.GameDir);
+				var info = new FileInfo(currentAssembly);
+
+				if (!string.IsNullOrWhiteSpace(metaGameAssembly)) {
+					var metaAssembly = Path.GetFullPath(metaGameAssembly);
+					if (!string.Equals(metaAssembly, currentAssembly, StringComparison.OrdinalIgnoreCase))
+						return false;
+				}
+
+				if (!string.IsNullOrWhiteSpace(metaGameDir)) {
+					var metaDir = Path.GetFullPath(metaGameDir);
+					if (!string.Equals(metaDir, currentDir, StringComparison.OrdinalIgnoreCase))
+						return false;
+				}
+
+				if (metaSize >= 0 && metaSize != info.Length)
+					return false;
+				if (metaTicks >= 0 && metaTicks != info.LastWriteTimeUtc.Ticks)
+					return false;
+
+				return true;
+			}
+			catch {
+				return false;
+			}
+		}
+
+		static void TryWriteDbMeta(string databasePath, UnityLocateResult locate) {
+			if (string.IsNullOrWhiteSpace(locate.GameAssemblyPath))
+				return;
+
+			try {
+				var assemblyPath = Path.GetFullPath(locate.GameAssemblyPath);
+				var info = new FileInfo(assemblyPath);
+				if (!info.Exists)
+					return;
+
+				var meta = new JObject {
+					["gameDir"] = Path.GetFullPath(locate.GameDir),
+					["gameAssemblyPath"] = assemblyPath,
+					["gameAssemblySize"] = info.Length,
+					["gameAssemblyLastWriteUtcTicks"] = info.LastWriteTimeUtc.Ticks,
+				};
+				File.WriteAllText(GetDbMetaPath(databasePath), meta.ToString(Formatting.Indented));
+			}
+			catch {
+			}
+		}
+
+		static string GetDbMetaPath(string databasePath) => databasePath + ".kiln.json";
 
 		sealed class SymbolEntry {
 			public string Name { get; set; } = string.Empty;
