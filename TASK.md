@@ -26,5 +26,5 @@
 - [x] 输出 JSON/文本作为分析上下文
 
 ## Phase 5：Patch & 打包
-- [ ] patch_codegen：生成 patch / 插件骨架（模板）
-- [ ] package_mod：产出 zip + install.md + rollback.ps1 + manifest.json
+- [x] patch_codegen：生成 patch / 插件骨架（模板）
+- [x] package_mod：产出 zip + install.md + rollback.ps1 + manifest.json

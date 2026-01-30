@@ -44,6 +44,8 @@
 - 2026-01-30: Phase 3 config — consolidate Il2CppDumper paths into il2cppRootDir and auto per-game dump dirs.
 - 2026-01-30: Phase 4 export — ida_export_symbols and ida_export_pseudocode emit JSON artifacts.
 - 2026-01-30: Phase 4 analysis — added analysis.* tools for indexed symbol/pseudocode search and retrieval.
+- 2026-01-30: Phase 5 complete — patch_codegen template + package_mod zip/manifest/rollback output.
+- 2026-01-30: Phase 5 fix — zip packaging now uses temp file to avoid self-inclusion.
 
 ## Next Steps
 - Implement Phase 3: IDA headless analysis + symbol/typing load.
