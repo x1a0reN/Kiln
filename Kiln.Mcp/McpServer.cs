@@ -297,24 +297,25 @@ namespace Kiln.Mcp {
 				return ToolError(id, "Missing gameDir");
 
 			var outputDir = input["outputDir"]?.Value<string>();
+			var expectedDumpDir = config.GetIl2CppDumpDir(gameDir);
 			if (string.IsNullOrWhiteSpace(outputDir))
-				outputDir = config.Il2CppDumpDir;
-			if (string.IsNullOrWhiteSpace(outputDir))
-				return ToolError(id, "Missing outputDir (set il2cppDumpDir in kiln.config.json).");
-			if (!string.IsNullOrWhiteSpace(config.Il2CppDumpDir) && !PathsEqual(outputDir, config.Il2CppDumpDir))
-				return ToolError(id, "outputDir must match il2cppDumpDir in kiln.config.json.");
+				outputDir = expectedDumpDir;
+			if (!PathsEqual(outputDir, expectedDumpDir))
+				return ToolError(id, "outputDir must match il2cppRootDir/<game-name> in kiln.config.json.");
 
 			var dumperPath = input["dumperPath"]?.Value<string>();
+			var expectedDumperDir = config.Il2CppRootDir;
+			var expectedDumperExe = config.GetIl2CppDumperPath();
 			if (!string.IsNullOrWhiteSpace(dumperPath)) {
-				if (string.IsNullOrWhiteSpace(config.Il2CppDumperPath))
-					return ToolError(id, "dumperPath override is not allowed; set kiln.config.json (il2cppDumperPath).");
-				if (!PathsEqual(dumperPath, config.Il2CppDumperPath))
-					return ToolError(id, "dumperPath override is not allowed; use the configured il2cppDumperPath.");
+				if (string.IsNullOrWhiteSpace(expectedDumperDir))
+					return ToolError(id, "dumperPath override is not allowed; set kiln.config.json (il2cppRootDir).");
+				if (!PathsEqual(dumperPath, expectedDumperDir) && !PathsEqual(dumperPath, expectedDumperExe))
+					return ToolError(id, "dumperPath override is not allowed; use il2cppRootDir or Il2CppDumper.exe inside it.");
 			}
-			dumperPath = config.Il2CppDumperPath;
+			dumperPath = expectedDumperDir;
 
 			if (string.IsNullOrWhiteSpace(dumperPath))
-				return ToolError(id, "Missing dumperPath (and no default in kiln.config.json)");
+				return ToolError(id, "Missing dumperPath (set il2cppRootDir in kiln.config.json)");
 
 			var locate = UnityLocator.Locate(gameDir);
 			if (!locate.IsIl2Cpp || string.IsNullOrWhiteSpace(locate.GameAssemblyPath) || string.IsNullOrWhiteSpace(locate.MetadataPath))
@@ -368,28 +369,26 @@ namespace Kiln.Mcp {
 
 			var scriptPath = input["scriptPath"]?.Value<string>();
 			if (!string.IsNullOrWhiteSpace(scriptPath)) {
-				if (string.IsNullOrWhiteSpace(config.IdaSymbolsScriptPath))
-					return ToolError(id, "scriptPath override is not allowed; set kiln.config.json (idaSymbolsScriptPath).");
-				if (!PathsEqual(scriptPath, config.IdaSymbolsScriptPath))
-					return ToolError(id, "scriptPath override is not allowed; use the configured idaSymbolsScriptPath.");
+				var expectedScriptPath = config.GetIdaSymbolsScriptPath();
+				if (string.IsNullOrWhiteSpace(expectedScriptPath))
+					return ToolError(id, "scriptPath override is not allowed; set kiln.config.json (il2cppRootDir).");
+				if (!PathsEqual(scriptPath, expectedScriptPath))
+					return ToolError(id, "scriptPath override is not allowed; use ida_with_struct_py3.py inside il2cppRootDir.");
 			}
 
-			var symbolScriptPath = config.IdaSymbolsScriptPath;
+			var symbolScriptPath = config.GetIdaSymbolsScriptPath();
 			if (string.IsNullOrWhiteSpace(symbolScriptPath))
-				return ToolError(id, "Missing idaSymbolsScriptPath (set kiln.config.json).");
+				return ToolError(id, "Missing ida_with_struct_py3.py (set il2cppRootDir in kiln.config.json).");
 			if (!File.Exists(symbolScriptPath))
-				return ToolError(id, $"idaSymbolsScriptPath not found: {symbolScriptPath}");
+				return ToolError(id, $"ida_with_struct_py3.py not found: {symbolScriptPath}");
 
-			var dumpDir = config.Il2CppDumpDir;
-			if (string.IsNullOrWhiteSpace(dumpDir))
-				return ToolError(id, "Missing il2cppDumpDir (set kiln.config.json).");
-
+			var dumpDir = config.GetIl2CppDumpDir(gameDir);
 			var scriptJson = Path.Combine(dumpDir, "script.json");
 			var il2cppHeader = Path.Combine(dumpDir, "il2cpp.h");
 			if (!File.Exists(scriptJson))
-				return ToolError(id, $"script.json not found in il2cppDumpDir: {scriptJson}");
+				return ToolError(id, $"script.json not found in il2cpp dump dir: {scriptJson}");
 			if (!File.Exists(il2cppHeader))
-				return ToolError(id, $"il2cpp.h not found in il2cppDumpDir: {il2cppHeader}");
+				return ToolError(id, $"il2cpp.h not found in il2cpp dump dir: {il2cppHeader}");
 
 			var autoLoadScript = IdaHeadlessRunner.GetAutoLoadScriptPath();
 			if (!File.Exists(autoLoadScript))
@@ -556,7 +555,7 @@ Arguments: { ""jobId"": ""..."" }
 - unity_locate
   { ""gameDir"": ""C:\\Games\\Example"" }
 - il2cpp_dump
-  { ""gameDir"": ""C:\\Games\\Example"", ""dumperPath"": ""C:\\Tools\\Il2CppDumper"" }
+  { ""gameDir"": ""C:\\Games\\Example"", ""dumperPath"": ""C:\\Kiln\\Il2CppDumper"" }
 - ida_analyze
   { ""gameDir"": ""C:\\Games\\Example"", ""idaPath"": ""C:\\Program Files\\IDA Professional 9.2\\idat64.exe"" }
 - ida_export_symbols

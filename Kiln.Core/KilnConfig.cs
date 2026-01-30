@@ -5,9 +5,7 @@ using System.Text.Json;
 namespace Kiln.Core {
 	public sealed class KilnConfig {
 		public string? IdaPath { get; set; }
-		public string? IdaSymbolsScriptPath { get; set; }
-		public string? Il2CppDumperPath { get; set; }
-		public string Il2CppDumpDir { get; set; } = string.Empty;
+		public string Il2CppRootDir { get; set; } = string.Empty;
 		public string IdaOutputDir { get; set; } = string.Empty;
 		public string WorkspaceRoot { get; set; } = string.Empty;
 
@@ -15,10 +13,8 @@ namespace Kiln.Core {
 			var root = ResolveRoot(baseDirectory);
 
 			var defaults = new KilnConfig {
-				Il2CppDumperPath = Path.Combine(root, "Il2CppDumper"),
-				IdaSymbolsScriptPath = Path.Combine(root, "Il2CppDumper", "ida_with_struct_py3.py"),
+				Il2CppRootDir = Path.Combine(root, "Il2CppDumper"),
 				WorkspaceRoot = Path.Combine(root, "workspace"),
-				Il2CppDumpDir = Path.Combine(root, "il2cpp_dump"),
 				IdaOutputDir = Path.Combine(root, "ida"),
 			};
 
@@ -36,9 +32,7 @@ namespace Kiln.Core {
 					return defaults;
 
 				loaded.IdaPath = NormalizeOptionalPath(root, loaded.IdaPath);
-				loaded.Il2CppDumperPath = NormalizePathWithDefault(root, loaded.Il2CppDumperPath, defaults.Il2CppDumperPath);
-				loaded.IdaSymbolsScriptPath = NormalizePathWithDefault(root, loaded.IdaSymbolsScriptPath, defaults.IdaSymbolsScriptPath);
-				loaded.Il2CppDumpDir = NormalizePathWithDefault(root, loaded.Il2CppDumpDir, defaults.Il2CppDumpDir);
+				loaded.Il2CppRootDir = NormalizePathWithDefault(root, ResolveIl2CppRootDir(root, loaded), defaults.Il2CppRootDir);
 				loaded.IdaOutputDir = NormalizePathWithDefault(root, loaded.IdaOutputDir, defaults.IdaOutputDir);
 				loaded.WorkspaceRoot = NormalizePathWithDefault(root, loaded.WorkspaceRoot, defaults.WorkspaceRoot);
 				return loaded;
@@ -75,5 +69,57 @@ namespace Kiln.Core {
 			var combined = Path.IsPathRooted(resolved) ? resolved : Path.Combine(root, resolved);
 			return Path.GetFullPath(combined);
 		}
+
+		static string? ResolveIl2CppRootDir(string root, KilnConfig loaded) {
+			if (!string.IsNullOrWhiteSpace(loaded.Il2CppRootDir))
+				return loaded.Il2CppRootDir;
+
+			if (!string.IsNullOrWhiteSpace(loaded.Il2CppDumperPath)) {
+				var candidate = loaded.Il2CppDumperPath!;
+				if (!Path.IsPathRooted(candidate))
+					candidate = Path.Combine(root, candidate);
+				if (File.Exists(candidate))
+					return Path.GetDirectoryName(candidate);
+				if (Directory.Exists(candidate))
+					return candidate;
+			}
+
+			if (!string.IsNullOrWhiteSpace(loaded.IdaSymbolsScriptPath)) {
+				var candidate = loaded.IdaSymbolsScriptPath!;
+				if (!Path.IsPathRooted(candidate))
+					candidate = Path.Combine(root, candidate);
+				if (File.Exists(candidate))
+					return Path.GetDirectoryName(candidate);
+			}
+
+			return null;
+		}
+
+		public string GetIl2CppDumperPath() =>
+			Path.Combine(Il2CppRootDir, "Il2CppDumper.exe");
+
+		public string GetIdaSymbolsScriptPath() =>
+			Path.Combine(Il2CppRootDir, "ida_with_struct_py3.py");
+
+		public string GetIl2CppDumpDir(string gameDir) {
+			var name = GetSafeGameName(gameDir);
+			return Path.Combine(Il2CppRootDir, name);
+		}
+
+		static string GetSafeGameName(string gameDir) {
+			var trimmed = (gameDir ?? string.Empty).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+			var name = string.IsNullOrWhiteSpace(trimmed) ? "game" : Path.GetFileName(trimmed);
+			if (string.IsNullOrWhiteSpace(name))
+				name = "game";
+
+			foreach (var ch in Path.GetInvalidFileNameChars())
+				name = name.Replace(ch, '_');
+
+			return name;
+		}
+
+		// Legacy fields (back-compat for older configs)
+		public string? IdaSymbolsScriptPath { get; set; }
+		public string? Il2CppDumperPath { get; set; }
 	}
 }

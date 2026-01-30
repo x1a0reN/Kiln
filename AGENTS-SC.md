@@ -41,6 +41,7 @@
 - 2026-01-30：Phase 3 符号——IDA 分析完成后自动加载 Il2CppDumper 符号/类型（包装脚本）。
 - 2026-01-30：Phase 3 配置——发布目录友好默认值与相对路径解析（dump/ida 输出）。
 - 2026-01-30：Phase 3 修复——IDA -S 参数引用处理 + dump 目录一致性校验。
+- 2026-01-30：Phase 3 配置——合并 Il2CppDumper 相关路径为 il2cppRootDir，并按游戏名创建 dump 子目录。
 
 ## 下一步
 - 实现 Phase 3：IDA headless 分析 + 符号/类型加载。
