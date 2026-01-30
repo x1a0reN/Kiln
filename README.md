@@ -51,6 +51,8 @@ Optional logging:
 - `analysis.index.build`
 - `analysis.symbols.search`
 - `analysis.symbols.get`
+- `analysis.symbols.xrefs`
+- `analysis.strings.search`
 - `analysis.pseudocode.search`
 - `analysis.pseudocode.get`
 - `patch_codegen`
@@ -65,20 +67,24 @@ These tools operate on exported artifacts under `idaOutputDir` (default: `ida/`)
 { "name": "ida_export_pseudocode", "arguments": { "jobId": "<jobId>" } }
 ```
 
-2) Build indexes (optional but faster):
+2) Build indexes (optional but faster, cached across jobs):
 ```json
 { "name": "analysis.index.build", "arguments": { "jobId": "<jobId>" } }
 ```
 
-3) Search symbols and pseudocode:
+3) Search symbols, strings, and pseudocode:
 ```json
-{ "name": "analysis.symbols.search", "arguments": { "jobId": "<jobId>", "query": "Player", "match": "contains", "limit": 20 } }
+{ "name": "analysis.symbols.search", "arguments": { "jobId": "<jobId>", "query": "Player", "field": "name", "match": "contains", "limit": 20 } }
+{ "name": "analysis.symbols.search", "arguments": { "jobId": "<jobId>", "query": "0x1801234", "field": "ea", "match": "exact", "limit": 5 } }
+{ "name": "analysis.symbols.search", "arguments": { "jobId": "<jobId>", "query": "void Player", "field": "signature", "match": "contains", "limit": 10 } }
+{ "name": "analysis.strings.search", "arguments": { "jobId": "<jobId>", "query": "weapon", "match": "contains", "includeRefs": true, "maxRefs": 20 } }
 { "name": "analysis.pseudocode.search", "arguments": { "jobId": "<jobId>", "query": "weaponId", "limit": 10, "snippetChars": 300 } }
 ```
 
 4) Fetch details:
 ```json
 { "name": "analysis.symbols.get", "arguments": { "jobId": "<jobId>", "name": "Player_Update" } }
+{ "name": "analysis.symbols.xrefs", "arguments": { "jobId": "<jobId>", "name": "Player_Update", "direction": "both", "limit": 50 } }
 { "name": "analysis.pseudocode.get", "arguments": { "jobId": "<jobId>", "name": "Player_Update", "maxChars": 4000 } }
 ```
 

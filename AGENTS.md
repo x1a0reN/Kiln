@@ -51,6 +51,7 @@
 - 2026-01-30: Phase 3/4 fix — default IDA output now namespaces by game to avoid DB collisions.
 - 2026-01-30: Phase 3/4 fix — reuseExisting validated via per-DB meta (game path + size + timestamp).
 - 2026-01-30: Phase 3/4 fix — reuseExisting also validates script.json and il2cpp.h metadata.
+- 2026-01-30: Phase 4/5 enhancements — export call graph + strings, add analysis xrefs/strings search + cross-job index cache, and enrich patch_codegen with targets + IL2CPP hook template.
 
 ## Next Steps
 - Implement Phase 3: IDA headless analysis + symbol/typing load.

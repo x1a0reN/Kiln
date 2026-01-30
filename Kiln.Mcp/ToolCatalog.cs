@@ -150,7 +150,7 @@ namespace Kiln.Mcp {
 					"ida_export_pseudocode"),
 				new ToolDef(
 					"analysis.index.build",
-					"Build local indexes for symbols and pseudocode exports.",
+					"Build local indexes for symbols, strings, and pseudocode exports.",
 					new JObject {
 						["type"] = "object",
 						["properties"] = new JObject {
@@ -162,12 +162,13 @@ namespace Kiln.Mcp {
 					"analysis.index.build"),
 				new ToolDef(
 					"analysis.symbols.search",
-					"Search exported symbols by name.",
+					"Search exported symbols by name, signature, or address.",
 					new JObject {
 						["type"] = "object",
 						["properties"] = new JObject {
 							["jobId"] = new JObject { ["type"] = "string" },
 							["query"] = new JObject { ["type"] = "string" },
+							["field"] = new JObject { ["type"] = "string", ["description"] = "name|signature|ea" },
 							["match"] = new JObject { ["type"] = "string", ["description"] = "exact|contains" },
 							["caseSensitive"] = new JObject { ["type"] = "boolean" },
 							["limit"] = new JObject { ["type"] = "integer" },
@@ -196,6 +197,43 @@ namespace Kiln.Mcp {
 						["additionalProperties"] = false,
 					},
 					"analysis.symbols.get"),
+				new ToolDef(
+					"analysis.symbols.xrefs",
+					"Get callers/callees for a function.",
+					new JObject {
+						["type"] = "object",
+						["properties"] = new JObject {
+							["jobId"] = new JObject { ["type"] = "string" },
+							["name"] = new JObject { ["type"] = "string" },
+							["ea"] = new JObject { ["type"] = "string" },
+							["caseSensitive"] = new JObject { ["type"] = "boolean" },
+							["direction"] = new JObject { ["type"] = "string", ["description"] = "callers|callees|both" },
+							["limit"] = new JObject { ["type"] = "integer" },
+							["offset"] = new JObject { ["type"] = "integer" },
+						},
+						["required"] = new JArray("jobId"),
+						["additionalProperties"] = false,
+					},
+					"analysis.symbols.xrefs"),
+				new ToolDef(
+					"analysis.strings.search",
+					"Search exported strings and optionally return function references.",
+					new JObject {
+						["type"] = "object",
+						["properties"] = new JObject {
+							["jobId"] = new JObject { ["type"] = "string" },
+							["query"] = new JObject { ["type"] = "string" },
+							["match"] = new JObject { ["type"] = "string", ["description"] = "exact|contains" },
+							["caseSensitive"] = new JObject { ["type"] = "boolean" },
+							["limit"] = new JObject { ["type"] = "integer" },
+							["offset"] = new JObject { ["type"] = "integer" },
+							["includeRefs"] = new JObject { ["type"] = "boolean" },
+							["maxRefs"] = new JObject { ["type"] = "integer" },
+						},
+						["required"] = new JArray("jobId", "query"),
+						["additionalProperties"] = false,
+					},
+					"analysis.strings.search"),
 				new ToolDef(
 					"analysis.pseudocode.search",
 					"Search in exported pseudocode and return snippets.",
