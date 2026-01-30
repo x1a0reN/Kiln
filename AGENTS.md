@@ -38,12 +38,11 @@
 - 2026-01-29: Build script (build.ps1 -NoMsbuild) timed out on this machine; targeted builds succeeded for dnSpyEx.MCP (net10.0-windows) and dnSpyEx.MCP.Bridge (net10.0-windows) with 0 errors.
 - 2026-01-29: Changed extension assembly name to dnSpyEx.MCP.x; built dnSpyEx.MCP for net10.0-windows with 0 warnings and no errors.
 - 2026-01-29: Added Output window logging for MCP server/requests; built dnSpyEx.MCP net10.0-windows with 0 warnings and no errors.
-- 2026-01-29: Added optional secondary target for the plugin with external references via DnSpyExBin; bridge now targets multiple Windows TFMs; builds succeeded.
+- 2026-01-29: Added DnSpyExBin-based external references for the plugin; builds succeeded for net10.0-windows.
 - 2026-01-29: Added output logging and a targeted suppression for BamlTabSaver NullReferenceException; added a null-guard in BamlTabSaver.
-- 2026-01-29: Secondary target build of dnSpy.BamlDecompiler cannot be produced from this repo due to API mismatch with installed binaries; plugin suppresses the crash instead.
 - 2026-01-29: Bridge now connects to the pipe on first tool call (lazy connect) and resets the pipe on failures to avoid early "Pipe hasn't been connected yet" exits.
 - 2026-01-29: Added pipe read/write error logging on the plugin side and a one-time reconnect retry in the bridge to mitigate transient broken-pipe errors.
-- 2026-01-29: Plugin build now auto-copies dnSpyEx.MCP.x.dll into D:\??\??-??\dnspyEx\bin\Extensions by default (disable with DisableDnSpyExInstallCopy=true or override DnSpyExInstallDir).
+- 2026-01-29: Plugin build auto-copies dnSpyEx.MCP.x.dll into D:\逆向\工具-逆向\dnspyEx\bin\Extensions by default (override DnSpyExInstallDir if needed).
 - 2026-01-29: Added explicit NamedPipe security (current user) and server-side creation error handling; removed mandatory label to avoid privilege errors and fixed a shutdown crash from TimeSpan.FromSeconds(long).
 - 2026-01-29: Server now accepts multiple concurrent NamedPipe clients (max instances) and handles connections in parallel to avoid timeouts when a stale client holds the only slot.
 - 2026-01-29: Added detailed pipe I/O logging (per-client request/EOF/errors) to diagnose early disconnects causing "Pipe closed" in the bridge.
@@ -58,6 +57,7 @@
 - 2026-01-29: Reworked dnspy.search to use a custom dnlib-based search (metadata + IL/body text) instead of internal dnSpy search APIs; updated module keying and UTF8String handling for search results.
 - 2026-01-30: Migrated MCP extension + bridge into a standalone repo and switched the plugin to net10.0-windows with dnSpyEx binary references (DnSpyExBin).
 - 2026-01-30: Added dnSpyEx.MCP.slnx, simplified DnSpyCommon.props (removed build task import), and pinned standalone builds to dnSpyExBin references; added .gitignore for bridge logs.
+- 2026-01-30: Cleaned standalone repo layout (kept Extensions\dnSpyEx.MCP) and removed tracked build artifacts; expanded .gitignore to cover bin/obj.
 
 ## Next Steps
 - Build the solution and confirm both projects compile.
@@ -146,7 +146,7 @@ Workflow:
 
 ## Notes
 - User wants progress tracked in AGENTS.md on each update.
-- User confirms they use .NET 10 builds only (net48 is not used) and wants build commands without DisableDnSpyExInstallCopy=true so the plugin auto-copies.
+- User confirms only .NET 10 builds; build commands should keep auto-copy enabled (do not set DisableDnSpyExInstallCopy).
 
 ## Rules
 - After each change, confirm build succeeds with no errors, then git commit and push to the repo.
