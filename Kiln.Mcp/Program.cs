@@ -16,7 +16,7 @@ namespace Kiln.Mcp {
 					cts.Cancel();
 				};
 
-				var server = new McpServer(jobManager);
+				var server = new McpServer(jobManager, config);
 				await server.RunAsync(cts.Token).ConfigureAwait(false);
 				return 0;
 			}

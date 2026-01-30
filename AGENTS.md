@@ -33,11 +33,13 @@
 - 2026-01-30: Added Kiln v0.1 plan and task checklist (PLAN.md, TASK.md).
 - 2026-01-30: Phase 0 kickoff — renamed project to Kiln, removed dnSpyEx plugin, created Kiln.Mcp/Kiln.Core/Kiln.Plugins structure, rewrote README and MCP tool list, added kiln.config.template.json and updated .gitignore.
 - 2026-01-30: Phase 1 complete — added KilnConfig loader, JobManager with job.json persistence, job logs, and workflow.run/status/logs/cancel MCP handlers (stub workflow runner).
+- 2026-01-30: Phase 2 complete — added Unity IL2CPP locate + Il2CppDumper runner, and wired detect_engine/unity_locate/il2cpp_dump MCP handlers (configurable dumper path).
+- 2026-01-30: Phase 2 verified — repo cleanup and Release build succeeded.
 
 ## Next Steps
-- Implement Phase 1: Job state machine, persistence, and workflow.* MCP endpoints.
-- Implement Phase 2: unity_locate + il2cpp_dump (Il2CppDumper integration).
-- Implement Phase 3/4: IDA headless analysis + symbol/pseudocode export.
+- Implement Phase 3: IDA headless analysis + symbol/typing load.
+- Implement Phase 4: symbol and pseudocode export.
+- Implement Phase 5: patch/codegen + packaging output.
 
 ## Build & Usage Guide
 

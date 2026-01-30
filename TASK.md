@@ -11,9 +11,9 @@
 - [x] workflow.status / workflow.logs / workflow.cancel MCP 接口
 
 ## Phase 2：Unity 定位 + Il2CppDumper
-- [ ] unity_locate：定位 GameAssembly.dll / global-metadata.dat
-- [ ] il2cpp_dump：调用 Il2CppDumper（可配置）
-- [ ] 输出 dump 目录 + 结构/映射文件
+- [x] unity_locate：定位 GameAssembly.dll / global-metadata.dat
+- [x] il2cpp_dump：调用 Il2CppDumper（可配置）
+- [x] 输出 dump 目录 + 结构/映射文件
 
 ## Phase 3：IDA Headless 分析
 - [ ] ida_analyze：idat64 -A -S 批处理分析

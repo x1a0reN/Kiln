@@ -4,3 +4,4 @@
 *.suo
 Kiln.Mcp/log/
 kiln.config.json
+workspace/

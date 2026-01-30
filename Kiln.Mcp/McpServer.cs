@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Kiln.Core;
+using Kiln.Plugins.Unity.Il2Cpp;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -11,9 +12,11 @@ namespace Kiln.Mcp {
 		readonly ToolCatalog catalog;
 		readonly ResourceCatalog resources;
 		readonly JobManager jobManager;
+		readonly KilnConfig config;
 
-		public McpServer(JobManager jobManager) {
+		public McpServer(JobManager jobManager, KilnConfig config) {
 			this.jobManager = jobManager ?? throw new ArgumentNullException(nameof(jobManager));
+			this.config = config ?? throw new ArgumentNullException(nameof(config));
 			catalog = new ToolCatalog();
 			resources = new ResourceCatalog();
 		}
@@ -166,6 +169,12 @@ namespace Kiln.Mcp {
 				return HandleWorkflowLogs(id, input);
 			if (tool.Method == "workflow.cancel")
 				return HandleWorkflowCancel(id, input);
+			if (tool.Method == "detect_engine")
+				return HandleDetectEngine(id, input);
+			if (tool.Method == "unity_locate")
+				return HandleUnityLocate(id, input);
+			if (tool.Method == "il2cpp_dump")
+				return HandleIl2CppDump(id, input);
 
 			await Task.Yield();
 			return ToolError(id, $"Tool not implemented yet: {tool.Name}");
@@ -232,6 +241,90 @@ namespace Kiln.Mcp {
 				["stage"] = info.Stage,
 				["percent"] = info.Percent,
 			};
+			return ToolOk(id, payload);
+		}
+
+		JObject HandleDetectEngine(JToken? id, JObject input) {
+			var gameDir = input["gameDir"]?.Value<string>();
+			if (string.IsNullOrWhiteSpace(gameDir))
+				return ToolError(id, "Missing gameDir");
+
+			var locate = UnityLocator.Locate(gameDir);
+			var engine = locate.IsIl2Cpp || locate.IsMono ? "Unity" : "Unknown";
+			var runtime = locate.IsIl2Cpp ? "IL2CPP" : (locate.IsMono ? "Mono" : "Unknown");
+
+			var payload = new JObject {
+				["engine"] = engine,
+				["runtime"] = runtime,
+				["gameDir"] = locate.GameDir,
+				["gameAssemblyPath"] = locate.GameAssemblyPath,
+				["metadataPath"] = locate.MetadataPath,
+				["dataDir"] = locate.DataDir,
+				["managedDir"] = locate.ManagedDir,
+				["notes"] = locate.Notes,
+			};
+
+			return ToolOk(id, payload);
+		}
+
+		JObject HandleUnityLocate(JToken? id, JObject input) {
+			var gameDir = input["gameDir"]?.Value<string>();
+			if (string.IsNullOrWhiteSpace(gameDir))
+				return ToolError(id, "Missing gameDir");
+
+			var locate = UnityLocator.Locate(gameDir);
+			var payload = new JObject {
+				["gameDir"] = locate.GameDir,
+				["gameAssemblyPath"] = locate.GameAssemblyPath,
+				["metadataPath"] = locate.MetadataPath,
+				["dataDir"] = locate.DataDir,
+				["managedDir"] = locate.ManagedDir,
+				["isIl2Cpp"] = locate.IsIl2Cpp,
+				["isMono"] = locate.IsMono,
+				["notes"] = locate.Notes,
+			};
+
+			return ToolOk(id, payload);
+		}
+
+		JObject HandleIl2CppDump(JToken? id, JObject input) {
+			var gameDir = input["gameDir"]?.Value<string>();
+			if (string.IsNullOrWhiteSpace(gameDir))
+				return ToolError(id, "Missing gameDir");
+
+			var outputDir = input["outputDir"]?.Value<string>();
+			if (string.IsNullOrWhiteSpace(outputDir))
+				return ToolError(id, "Missing outputDir");
+
+			var dumperPath = input["dumperPath"]?.Value<string>();
+			if (string.IsNullOrWhiteSpace(dumperPath))
+				dumperPath = config.Il2CppDumperPath;
+
+			if (string.IsNullOrWhiteSpace(dumperPath))
+				return ToolError(id, "Missing dumperPath (and no default in kiln.config.json)");
+
+			var locate = UnityLocator.Locate(gameDir);
+			if (!locate.IsIl2Cpp || string.IsNullOrWhiteSpace(locate.GameAssemblyPath) || string.IsNullOrWhiteSpace(locate.MetadataPath))
+				return ToolError(id, "Unity IL2CPP artifacts not found (GameAssembly.dll / global-metadata.dat).");
+
+			Il2CppDumpResult result;
+			try {
+				result = Il2CppDumperRunner.Run(locate.GameAssemblyPath, locate.MetadataPath, dumperPath, outputDir);
+			}
+			catch (Exception ex) {
+				return ToolError(id, $"Il2CppDumper failed: {ex.Message}");
+			}
+
+			var payload = new JObject {
+				["success"] = result.Success,
+				["exitCode"] = result.ExitCode,
+				["gameAssemblyPath"] = result.GameAssemblyPath,
+				["metadataPath"] = result.MetadataPath,
+				["outputDir"] = result.OutputDir,
+				["stdout"] = result.StdOut,
+				["stderr"] = result.StdErr,
+			};
+
 			return ToolOk(id, payload);
 		}
 

@@ -33,11 +33,13 @@
 - 2026-01-30：新增 Kiln v0.1 计划与任务清单（PLAN.md、TASK.md）。
 - 2026-01-30：Phase 0 启动——更名为 Kiln、移除 dnSpyEx 插件、建立 Kiln.Mcp/Kiln.Core/Kiln.Plugins 结构、重写 README 与工具列表、添加 kiln.config.template.json 并更新 .gitignore。
 - 2026-01-30：Phase 1 完成——新增 KilnConfig 加载、JobManager（job.json 持久化 + 日志）、实现 workflow.run/status/logs/cancel MCP 处理（工作流暂为 stub）。
+- 2026-01-30：Phase 2 完成——新增 Unity IL2CPP 定位与 Il2CppDumper 调用，接入 detect_engine/unity_locate/il2cpp_dump MCP 接口（支持配置默认 dumper 路径）。
+- 2026-01-30：Phase 2 已验证——仓库清理完成且 Release 构建通过。
 
 ## 下一步
-- 实现 Phase 1：Job 状态机、持久化、workflow.* MCP 接口。
-- 实现 Phase 2：unity_locate + il2cpp_dump（对接 Il2CppDumper）。
-- 实现 Phase 3/4：IDA headless 分析 + 符号/伪代码导出。
+- 实现 Phase 3：IDA headless 分析 + 符号/类型加载。
+- 实现 Phase 4：符号与伪代码导出。
+- 实现 Phase 5：patch/codegen + 打包产物。
 
 ## 构建与运行
 
