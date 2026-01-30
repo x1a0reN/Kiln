@@ -1,9 +1,9 @@
 using System;
 using System.IO;
 
-namespace dnSpyEx.MCP.Bridge {
-	static class BridgeLog {
-		static readonly string? LogPath = Environment.GetEnvironmentVariable("DNSPYEX_MCP_BRIDGE_LOG");
+namespace Kiln.Mcp {
+	static class KilnLog {
+		static readonly string? LogPath = Environment.GetEnvironmentVariable("KILN_MCP_LOG");
 		static readonly object Gate = new object();
 
 		public static void Info(string message) => Write("INFO", message);

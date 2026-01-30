@@ -2,4 +2,5 @@
 **/obj/
 *.user
 *.suo
-Tools/dnSpyEx.MCP.Bridge/log/
+Kiln.Mcp/log/
+kiln.config.json

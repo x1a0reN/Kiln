@@ -5,14 +5,12 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
-namespace dnSpyEx.MCP.Bridge {
+namespace Kiln.Mcp {
 	sealed class McpServer {
-		readonly PipeClient pipe;
 		readonly ToolCatalog catalog;
 		readonly ResourceCatalog resources;
 
-		public McpServer(PipeClient pipe) {
-			this.pipe = pipe ?? throw new ArgumentNullException(nameof(pipe));
+		public McpServer() {
 			catalog = new ToolCatalog();
 			resources = new ResourceCatalog();
 		}
@@ -30,16 +28,16 @@ namespace dnSpyEx.MCP.Bridge {
 					request = JObject.Parse(line);
 				}
 				catch (JsonException) {
-					BridgeLog.Warn("stdio parse error");
-					await WriteResponseAsync(MakeError(null, -32700, "Parse error")).ConfigureAwait(false);
-					continue;
-				}
+				KilnLog.Warn("stdio parse error");
+				await WriteResponseAsync(MakeError(null, -32700, "Parse error")).ConfigureAwait(false);
+				continue;
+			}
 
-				BridgeLog.Info($"stdio request: {request["method"]?.Value<string>() ?? "(null)"}");
-				var response = await HandleRequestAsync(request, token).ConfigureAwait(false);
-				if (response is null)
-					continue;
-				await WriteResponseAsync(response).ConfigureAwait(false);
+			KilnLog.Info($"stdio request: {request["method"]?.Value<string>() ?? "(null)"}");
+			var response = await HandleRequestAsync(request, token).ConfigureAwait(false);
+			if (response is null)
+				continue;
+			await WriteResponseAsync(response).ConfigureAwait(false);
 			}
 		}
 
@@ -74,7 +72,7 @@ namespace dnSpyEx.MCP.Bridge {
 					["resources"] = new JObject(),
 				},
 				["serverInfo"] = new JObject {
-					["name"] = "dnSpyEx.MCP.Bridge",
+					["name"] = "Kiln.Mcp",
 					["version"] = "0.1.0",
 				},
 			};
@@ -133,7 +131,7 @@ namespace dnSpyEx.MCP.Bridge {
 			if (!catalog.Tools.TryGetValue(name, out var tool))
 				return MakeError(id, -32601, $"Unknown tool: {name}");
 
-			BridgeLog.Info($"tool call: {name}");
+			KilnLog.Info($"tool call: {name}");
 			if (tool.Method == "__local.help") {
 				return MakeResult(id, new JObject {
 					["content"] = new JArray {
@@ -157,37 +155,8 @@ namespace dnSpyEx.MCP.Bridge {
 				});
 			}
 
-			var rpcReq = new JObject {
-				["jsonrpc"] = "2.0",
-				["id"] = Guid.NewGuid().ToString("N"),
-				["method"] = tool.Method,
-				["params"] = input,
-			};
-
-			JObject rpcResp;
-			try {
-				rpcResp = await pipe.CallAsync(rpcReq, token).ConfigureAwait(false);
-			}
-			catch (Exception ex) {
-				return ToolError(id, $"IPC error: {ex.Message}");
-			}
-
-			var error = rpcResp["error"] as JObject;
-			if (error is not null)
-				return ToolError(id, error["message"]?.Value<string>() ?? "IPC error");
-
-			var result = rpcResp["result"];
-			var text = result is null ? string.Empty : result.ToString(Formatting.Indented);
-			var content = new JArray {
-				new JObject {
-					["type"] = "text",
-					["text"] = text,
-				},
-			};
-			return MakeResult(id, new JObject {
-				["content"] = content,
-				["isError"] = false,
-			});
+			await Task.Yield();
+			return ToolError(id, $"Tool not implemented yet: {tool.Name}");
 		}
 
 		static JObject ToolError(JToken? id, string message) {
@@ -226,111 +195,72 @@ namespace dnSpyEx.MCP.Bridge {
 		}
 
 		const string HelpText =
-@"dnSpyEx MCP tools (quick guide)
+@"Kiln MCP tools (quick guide)
 
 Read first:
-- dnspy.exampleFlow (full usage examples)
+- kiln.exampleFlow (full usage examples)
 
 Common flow:
-1) dnspy.listAssemblies -> pick moduleMvid
-2) dnspy.listNamespaces(moduleMvid) -> choose namespace ("" = global)
-3) dnspy.listTypes(moduleMvid, namespace) -> pick typeToken
-4) dnspy.listMembers(moduleMvid, typeToken) -> pick member token
-5) dnspy.decompileMethod / dnspy.decompileField / dnspy.decompileProperty / dnspy.decompileEvent
+1) workflow.run -> get job_id
+2) workflow.status -> progress + stage
+3) workflow.logs -> tail logs
+4) workflow.cancel -> stop job
 
 Notes:
-- namespace parameter can be empty string for global namespace.
-- token/typeToken are uint metadata tokens from listTypes/listMembers.
-- dnspy.decompile only supports method|field|property|event (no full type output).
-- MCP resources are available via resources/list and resources/read (BepInEx docs).";
+- Use resources/list and resources/read to load embedded docs (e.g. BepInEx).";
 
 		const string ExampleFlowText =
-@"dnSpyEx MCP example flow (detailed)
+@"Kiln MCP example flow (detailed)
 
 0) Read the docs tools
-- dnspy.exampleFlow: full usage examples (this text).
-- dnspy.help: short summary and tips.
+- kiln.exampleFlow: full usage examples (this text).
+- kiln.help: short summary and tips.
 
-1) List modules
-Tool: dnspy.listAssemblies
-Arguments: {}
-Returns: array of modules with moduleMvid, moduleName, assemblyName, filename.
-
-2) List namespaces in a module
-Tool: dnspy.listNamespaces
+1) Run a workflow
+Tool: workflow.run
 Arguments:
-{ ""moduleMvid"": ""<GUID>"" }
-Note: global namespace is returned as empty string """".
-
-3) List types in a namespace (including global)
-Tool: dnspy.listTypes
-Arguments:
-{ ""moduleMvid"": ""<GUID>"", ""namespace"": ""My.Namespace"" }
-Global namespace example:
-{ ""moduleMvid"": ""<GUID>"", ""namespace"": """" }
-Returns: array of types with token and fullName.
-
-4) List members in a type
-Tool: dnspy.listMembers
-Arguments:
-{ ""moduleMvid"": ""<GUID>"", ""typeToken"": 33554433 }
-Returns: methods/fields/properties/events with token.
-
-5) Decompile (method/field/property/event only)
-Tools:
-- dnspy.decompileMethod
-  { ""moduleMvid"": ""<GUID>"", ""token"": 100663297 }
-- dnspy.decompileField
-  { ""moduleMvid"": ""<GUID>"", ""token"": 67108865 }
-- dnspy.decompileProperty
-  { ""moduleMvid"": ""<GUID>"", ""token"": 385875968 }
-- dnspy.decompileEvent
-  { ""moduleMvid"": ""<GUID>"", ""token"": 536870912 }
-- dnspy.decompile (kind = method|field|property|event)
-  { ""kind"": ""method"", ""moduleMvid"": ""<GUID>"", ""token"": 100663297 }
-
-6) Field / enum / struct / interface info
-- dnspy.getFieldInfo
-  { ""moduleMvid"": ""<GUID>"", ""token"": 67108865 }
-- dnspy.getEnumInfo
-  { ""moduleMvid"": ""<GUID>"", ""typeToken"": 33554433 }
-- dnspy.getStructInfo
-  { ""moduleMvid"": ""<GUID>"", ""typeToken"": 33554433 }
-- dnspy.getInterfaceInfo
-  { ""moduleMvid"": ""<GUID>"", ""typeToken"": 33554433 }
-
-7) Search (full dnSpyEx search settings)
-Tool: dnspy.search
-Arguments (minimal):
-{ ""searchText"": ""Player"" }
-Arguments (full example):
 {
-  ""searchText"": ""Player"",
-  ""searchType"": ""type"",
-  ""searchLocation"": ""allFiles"",
-  ""caseSensitive"": false,
-  ""matchWholeWords"": false,
-  ""matchAnySearchTerm"": false,
-  ""searchDecompiledData"": true,
-  ""searchFrameworkAssemblies"": true,
-  ""searchCompilerGeneratedMembers"": true,
-  ""syntaxHighlight"": true,
-  ""maxResults"": 5000
+  ""flowName"": ""unity.il2cpp"",
+  ""params"": {
+    ""gameDir"": ""C:\\Games\\Example"",
+    ""outputDir"": ""C:\\Kiln\\output""
+  }
 }
+Returns: { ""jobId"": ""..."" }
 
-8) Get selected text
-Tool: dnspy.getSelectedText
-Arguments: {}
-Returns: hasViewer, isEmpty, caretPosition, text.
+2) Check status
+Tool: workflow.status
+Arguments: { ""jobId"": ""..."" }
+Returns: { ""percent"": 0-100, ""stage"": ""..."", ""state"": ""Running|Completed|Failed"" }
 
-Tips:
-- Always call dnspy.exampleFlow first for full examples.
-- Use moduleMvid + token/typeToken from previous list calls.
+3) Tail logs
+Tool: workflow.logs
+Arguments: { ""jobId"": ""..."", ""tail"": 200 }
 
-9) MCP resources (BepInEx docs)
-- List resources:
-  resources/list
-- Read a resource:
-  resources/read { ""uri"": ""bepinex://docs/il2cpp-guide"" }";
+4) Cancel
+Tool: workflow.cancel
+Arguments: { ""jobId"": ""..."" }
+
+5) Step tools (advanced users)
+- detect_engine
+  { ""gameDir"": ""C:\\Games\\Example"" }
+- unity_locate
+  { ""gameDir"": ""C:\\Games\\Example"" }
+- il2cpp_dump
+  { ""gameDir"": ""C:\\Games\\Example"", ""dumperPath"": ""C:\\Tools\\Il2CppDumper"", ""outputDir"": ""C:\\Kiln\\work\\dump"" }
+- ida_analyze
+  { ""gameDir"": ""C:\\Games\\Example"", ""idaPath"": ""C:\\Program Files\\IDA Professional 9.2\\idat64.exe"", ""idbDir"": ""C:\\Kiln\\work\\ida"" }
+- ida_export_symbols
+  { ""jobId"": ""..."" }
+- ida_export_pseudocode
+  { ""jobId"": ""..."" }
+- patch_codegen
+  { ""requirements"": ""..."", ""analysisArtifacts"": [""...""] }
+- package_mod
+  { ""outputDir"": ""C:\\Kiln\\output"" }
+
+6) MCP resources (BepInEx docs)
+- List resources: resources/list
+- Read a resource: resources/read { ""uri"": ""bepinex://docs/il2cpp-guide"" }";
 	}
 }

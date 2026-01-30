@@ -1,96 +1,62 @@
-# dnSpyEx.MCP (Standalone)
+# Kiln
 
 English description:
-dnSpyEx MCP extension and stdio bridge that expose local decompilation tools to AI clients via a NamedPipe IPC.
+Kiln is a Windows-only MCP server focused on game reverse engineering workflows, starting with a Unity IL2CPP end-to-end pipeline.
 
-这是一个独立仓库，仅包含 dnSpyEx 的 MCP 插件与 stdio bridge，不包含 dnSpyEx 源码。
+## Scope (v0.1)
+- Windows only
+- stdio MCP server (streamable HTTP later)
+- Unity IL2CPP vertical workflow (Il2CppDumper + IDA Pro)
+- Embedded MCP resources (BepInEx docs)
 
-## 功能特性
-- 插件端在 dnSpyEx 内启动本地 NamedPipe IPC（JSON-RPC，按行分隔）。
-- bridge 端通过 stdio 提供 MCP 服务，转发到本地 NamedPipe。
-- 内置 MCP Resources：BepInEx v6 文档与资源索引。
-- 工具覆盖：程序集/命名空间/类型/成员枚举、反编译、搜索、选中文本等。
+## Repository layout
+- `Kiln.Mcp`: stdio MCP server (single external entrypoint)
+- `Kiln.Core`: workflow + job + artifact core (planned)
+- `Kiln.Plugins/Unity.Il2Cpp`: Unity IL2CPP pipeline (planned)
+- `Kiln.Plugins/Ida.Pro`: IDA headless automation (planned)
+- `Kiln.Plugins/DotNetAnalysis`: .NET analysis helpers (planned)
+- `Kiln.Plugins/Packaging`: packaging + manifests (planned)
+- `Kiln.slnx`: solution for the Kiln projects
 
-## 项目结构
-- `Extensions/dnSpyEx.MCP`: dnSpyEx 扩展（插件）。
-- `Tools/dnSpyEx.MCP.Bridge`: MCP stdio bridge 控制台程序。
-- `dnSpyEx.MCP.slnx`: 只包含插件与 bridge 的解决方案。
-
-## 前置条件
+## Prerequisites
 - Windows
 - .NET SDK 10.x
-- 本机已安装 dnSpyEx，可访问其二进制目录（默认路径可覆盖）
 
-默认二进制目录（可覆盖）：
+## Build
 ```
-C:\Path\dnSpyEx\bin
-```
-
-## 构建
-插件：
-```
-dotnet build Extensions\dnSpyEx.MCP\dnSpyEx.MCP.csproj -c Release -f net10.0-windows
+dotnet build Kiln.slnx -c Release
 ```
 
-bridge：
+## Run (stdio MCP)
 ```
-dotnet build Tools\dnSpyEx.MCP.Bridge\dnSpyEx.MCP.Bridge.csproj -c Release -f net10.0-windows
-```
-
-指定 dnSpyEx 二进制路径（若安装路径不同）：
-```
-dotnet build Extensions\dnSpyEx.MCP\dnSpyEx.MCP.csproj -c Release -f net10.0-windows -p:DnSpyExBin="C:\Path\dnSpyEx\bin"
+dotnet run --project Kiln.Mcp -c Release
 ```
 
-插件默认会自动复制到 dnSpyEx 扩展目录；如需自定义扩展目录：
-```
--p:DnSpyExInstallDir="C:\Path\dnSpyEx\bin\Extensions"
-```
+Optional logging:
+- Set `KILN_MCP_LOG` to a file path to capture MCP logs.
 
-## 运行
-1) 启动 dnSpyEx：
-```
-C:\Path\dnSpyEx\bin\dnSpy.exe
-```
+## MCP tools (Phase 0 stubs)
+- `kiln.help`
+- `kiln.exampleFlow`
+- `workflow.run`
+- `workflow.status`
+- `workflow.logs`
+- `workflow.cancel`
+- `detect_engine`
+- `unity_locate`
+- `il2cpp_dump`
+- `ida_analyze`
+- `ida_export_symbols`
+- `ida_export_pseudocode`
+- `patch_codegen`
+- `package_mod`
 
-2) 启动 MCP bridge：
-```
-dotnet run --project Tools/dnSpyEx.MCP.Bridge -c Release
-```
+## MCP resources
+- List: `resources/list`
+- Read: `resources/read` with `{ "uri": "<resource-uri>" }`
+- Resource index: `kiln://docs/resource-index`
 
-## 管道配置
-- 默认管道名：`dnSpyEx.MCP`
-- 环境变量覆盖：`DNSPYEX_MCP_PIPE`
-- bridge 参数：`--pipe <name>`
-
-## MCP 工具（MVP）
-- dnspy.help
-- dnspy.exampleFlow
-- dnspy.listAssemblies
-- dnspy.listNamespaces
-- dnspy.listTypes
-- dnspy.listMembers
-- dnspy.decompile
-- dnspy.decompileMethod
-- dnspy.decompileField
-- dnspy.decompileProperty
-- dnspy.decompileEvent
-- dnspy.getFieldInfo
-- dnspy.getEnumInfo
-- dnspy.getStructInfo
-- dnspy.getInterfaceInfo
-- dnspy.search
-- dnspy.getSelectedText
-
-## MCP Resources
-资源列表与读取：
-- `resources/list`
-- `resources/read`（参数：`{ "uri": "<resource-uri>" }`）
-
-资源索引（建议先读）：
-- `dnspyex://docs/resource-index`
-
-BepInEx 文档资源：
+### BepInEx docs
 - `bepinex://docs/plugin-structure`
 - `bepinex://docs/harmony-patching`
 - `bepinex://docs/configuration`
@@ -98,25 +64,21 @@ BepInEx 文档资源：
 - `bepinex://docs/il2cpp-guide`
 - `bepinex://docs/mono-vs-il2cpp`
 
-## MCP 配置（主流 AI 客户端）
-说明：以下为通用 MCP Server 配置片段。不同客户端的配置入口/文件路径可能不同，请按客户端官方文档放置配置。
+## MCP configs (popular AI clients)
 
-通用配置片段（请按需修改）：
+Generic MCP config snippet:
 ```json
 {
   "mcpServers": {
-    "dnspyex": {
+    "kiln": {
       "command": "dotnet",
       "args": [
         "run",
         "--project",
-        "Tools/dnSpyEx.MCP.Bridge",
+        "Kiln.Mcp",
         "-c",
         "Release"
-      ],
-      "env": {
-        "DNSPYEX_MCP_PIPE": "dnSpyEx.MCP"
-      }
+      ]
     }
   }
 }
@@ -126,18 +88,15 @@ BepInEx 文档资源：
 ```json
 {
   "mcpServers": {
-    "dnspyex": {
+    "kiln": {
       "command": "dotnet",
       "args": [
         "run",
         "--project",
-        "Tools/dnSpyEx.MCP.Bridge",
+        "Kiln.Mcp",
         "-c",
         "Release"
-      ],
-      "env": {
-        "DNSPYEX_MCP_PIPE": "dnSpyEx.MCP"
-      }
+      ]
     }
   }
 }
@@ -147,18 +106,15 @@ BepInEx 文档资源：
 ```json
 {
   "mcpServers": {
-    "dnspyex": {
+    "kiln": {
       "command": "dotnet",
       "args": [
         "run",
         "--project",
-        "Tools/dnSpyEx.MCP.Bridge",
+        "Kiln.Mcp",
         "-c",
         "Release"
-      ],
-      "env": {
-        "DNSPYEX_MCP_PIPE": "dnSpyEx.MCP"
-      }
+      ]
     }
   }
 }
@@ -168,18 +124,15 @@ BepInEx 文档资源：
 ```json
 {
   "mcpServers": {
-    "dnspyex": {
+    "kiln": {
       "command": "dotnet",
       "args": [
         "run",
         "--project",
-        "Tools/dnSpyEx.MCP.Bridge",
+        "Kiln.Mcp",
         "-c",
         "Release"
-      ],
-      "env": {
-        "DNSPYEX_MCP_PIPE": "dnSpyEx.MCP"
-      }
+      ]
     }
   }
 }
@@ -189,18 +142,15 @@ BepInEx 文档资源：
 ```json
 {
   "mcpServers": {
-    "dnspyex": {
+    "kiln": {
       "command": "dotnet",
       "args": [
         "run",
         "--project",
-        "Tools/dnSpyEx.MCP.Bridge",
+        "Kiln.Mcp",
         "-c",
         "Release"
-      ],
-      "env": {
-        "DNSPYEX_MCP_PIPE": "dnSpyEx.MCP"
-      }
+      ]
     }
   }
 }
@@ -210,25 +160,16 @@ BepInEx 文档资源：
 ```json
 {
   "mcpServers": {
-    "dnspyex": {
+    "kiln": {
       "command": "dotnet",
       "args": [
         "run",
         "--project",
-        "Tools/dnSpyEx.MCP.Bridge",
+        "Kiln.Mcp",
         "-c",
         "Release"
-      ],
-      "env": {
-        "DNSPYEX_MCP_PIPE": "dnSpyEx.MCP"
-      }
+      ]
     }
   }
 }
 ```
-
-## 使用建议
-1) 先启动 dnSpyEx（插件会在 AppLoaded 启动管道）。
-2) 再启动 MCP bridge。
-3) 在 AI 客户端中调用 `resources/list`，读取资源索引与 BepInEx 文档。
-4) 通过 `dnspy.list*` / `dnspy.decompile*` / `dnspy.search` 完成分析流程。

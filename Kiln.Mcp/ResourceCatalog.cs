@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace dnSpyEx.MCP.Bridge {
+namespace Kiln.Mcp {
 	sealed class ResourceCatalog {
 		readonly Dictionary<string, string> resources = new Dictionary<string, string>(StringComparer.Ordinal);
 		readonly List<ResourceInfo> resourceInfos = new List<ResourceInfo>();
@@ -37,6 +37,8 @@ namespace dnSpyEx.MCP.Bridge {
 		static string Describe(string uri, string name) {
 			if (uri.StartsWith("bepinex://", StringComparison.OrdinalIgnoreCase))
 				return $"BepInEx v6 Documentation: {FormatName(name)}";
+			if (uri.StartsWith("kiln://", StringComparison.OrdinalIgnoreCase))
+				return $"Kiln Documentation: {FormatName(name)}";
 			return $"Embedded resource: {FormatName(name)}";
 		}
 
@@ -50,7 +52,7 @@ namespace dnSpyEx.MCP.Bridge {
 			// Source: https://github.com/KernelErr/dnSpy.Extension.MCP (GPL-3.0).
 			// Embedded docs are copied as-is to provide MCP resources for BepInEx workflows.
 
-			resources["dnspyex://docs/resource-index"] = @"# dnSpyEx MCP Resource Index
+			resources["kiln://docs/resource-index"] = @"# Kiln MCP Resource Index
 
 This index helps AI clients discover and load embedded MCP resources.
 

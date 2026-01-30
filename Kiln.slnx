@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/Kiln.Mcp/">
+    <Project Path="Kiln.Mcp/Kiln.Mcp.csproj" />
+  </Folder>
+  <Folder Name="/Kiln.Core/">
+    <Project Path="Kiln.Core/Kiln.Core.csproj" />
+  </Folder>
+  <Folder Name="/Kiln.Plugins/">
+    <Project Path="Kiln.Plugins/Unity.Il2Cpp/Kiln.Plugins.Unity.Il2Cpp.csproj" />
+    <Project Path="Kiln.Plugins/Ida.Pro/Kiln.Plugins.Ida.Pro.csproj" />
+    <Project Path="Kiln.Plugins/DotNetAnalysis/Kiln.Plugins.DotNetAnalysis.csproj" />
+    <Project Path="Kiln.Plugins/Packaging/Kiln.Plugins.Packaging.csproj" />
+  </Folder>
+</Solution>
