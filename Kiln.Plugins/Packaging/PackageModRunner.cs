@@ -28,9 +28,13 @@ namespace Kiln.Plugins.Packaging {
 			File.WriteAllText(installPath, BuildInstallDoc());
 			File.WriteAllText(rollbackPath, BuildRollbackScript());
 
+			var tempZip = Path.Combine(Path.GetTempPath(), $"{Path.GetFileName(outputDir)}_{Guid.NewGuid():N}.zip");
+			if (File.Exists(tempZip))
+				File.Delete(tempZip);
+			ZipFile.CreateFromDirectory(outputDir, tempZip, CompressionLevel.Optimal, false);
 			if (File.Exists(packagePath))
 				File.Delete(packagePath);
-			ZipFile.CreateFromDirectory(outputDir, packagePath, CompressionLevel.Optimal, false);
+			File.Move(tempZip, packagePath);
 
 			return new PackageModResult(outputDir, manifestPath, installPath, rollbackPath, packagePath, payloadFiles);
 		}

@@ -45,6 +45,7 @@
 - 2026-01-30：Phase 4 导出——ida_export_symbols / ida_export_pseudocode 输出 JSON 产物。
 - 2026-01-30：Phase 4 分析——新增 analysis.* 工具用于索引/检索符号与伪代码。
 - 2026-01-30：Phase 5 完成——patch_codegen 模板 + package_mod 打包/清单/回滚产物。
+- 2026-01-30：Phase 5 修复——打包 zip 使用临时文件避免自包含。
 
 ## 下一步
 - 实现 Phase 3：IDA headless 分析 + 符号/类型加载。
