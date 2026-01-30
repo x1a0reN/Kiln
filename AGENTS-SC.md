@@ -57,6 +57,7 @@
 - 2026-01-30：迁移 MCP 插件与 bridge 到独立仓库，并将插件固定为 net10.0-windows + dnSpyEx 二进制引用（DnSpyExBin）。
 - 2026-01-30：新增 dnSpyEx.MCP.slnx，简化 DnSpyCommon.props（移除构建任务导入），固定独立构建走 DnSpyExBin；补充 .gitignore。
 - 2026-01-30：清理独立仓库结构（保留 Extensions\dnSpyEx.MCP）并移除已跟踪构建产物；扩展 .gitignore 覆盖 bin/obj。
+- 2026-01-30：新增独立仓库 README（构建/运行与二进制依赖说明），并移除旧 dnSpyEx.MCP fork 的远端以避免混淆。
 
 ## 下一步
 - 构建并确认两个项目可正常编译。

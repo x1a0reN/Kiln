@@ -58,6 +58,7 @@
 - 2026-01-30: Migrated MCP extension + bridge into a standalone repo and switched the plugin to net10.0-windows with dnSpyEx binary references (DnSpyExBin).
 - 2026-01-30: Added dnSpyEx.MCP.slnx, simplified DnSpyCommon.props (removed build task import), and pinned standalone builds to dnSpyExBin references; added .gitignore for bridge logs.
 - 2026-01-30: Cleaned standalone repo layout (kept Extensions\dnSpyEx.MCP) and removed tracked build artifacts; expanded .gitignore to cover bin/obj.
+- 2026-01-30: Added standalone README (build/run + binary dependency notes) and removed remotes from the legacy dnSpyEx.MCP fork to avoid confusion.
 
 ## Next Steps
 - Build the solution and confirm both projects compile.
