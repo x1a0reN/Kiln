@@ -1402,7 +1402,13 @@ namespace Kiln.Mcp {
 						["limit"] = maxStringMatches,
 						["offset"] = 0,
 					};
-					var findResult = await CallIdaToolStructuredAsync("ida.find_regex", findArgs, token, databasePath, allowAutoStart).ConfigureAwait(false);
+					JToken? findResult = null;
+					try {
+						findResult = await CallIdaToolStructuredAsync("ida.find_regex", findArgs, token, databasePath, allowAutoStart).ConfigureAwait(false);
+					}
+					catch {
+						continue;
+					}
 					if (findResult is not JObject findObj)
 						continue;
 
@@ -1425,7 +1431,13 @@ namespace Kiln.Mcp {
 						["addrs"] = new JArray(matches),
 						["limit"] = maxStringXrefs,
 					};
-					var xrefsResult = await CallIdaToolStructuredAsync("ida.xrefs_to", xrefsArgs, token, databasePath, allowAutoStart).ConfigureAwait(false);
+					JToken? xrefsResult = null;
+					try {
+						xrefsResult = await CallIdaToolStructuredAsync("ida.xrefs_to", xrefsArgs, token, databasePath, allowAutoStart).ConfigureAwait(false);
+					}
+					catch {
+						continue;
+					}
 					if (xrefsResult is not JArray xrefsList)
 						continue;
 
@@ -1443,6 +1455,55 @@ namespace Kiln.Mcp {
 							AddStringHit(addr, name, keyword);
 						}
 					}
+				}
+			}
+
+			if (functions.Count == 0) {
+				var queryArray = new JArray();
+				if (keywords.Count == 0) {
+					queryArray.Add(new JObject {
+						["offset"] = 0,
+						["count"] = maxFunctions,
+						["filter"] = "*",
+					});
+				}
+				else {
+					foreach (var keyword in keywords) {
+						queryArray.Add(new JObject {
+							["offset"] = 0,
+							["count"] = maxFunctions,
+							["filter"] = keyword,
+						});
+					}
+				}
+
+				try {
+					var listArgs = new JObject {
+						["queries"] = queryArray,
+					};
+					var listResult = await CallIdaToolStructuredAsync("ida.list_funcs", listArgs, token, databasePath, allowAutoStart).ConfigureAwait(false);
+					if (listResult is JArray pages) {
+						foreach (var page in pages.OfType<JObject>()) {
+							if (page["data"] is not JArray data)
+								continue;
+							foreach (var entry in data.OfType<JObject>()) {
+								var addr = entry["addr"]?.Value<string>();
+								var name = entry["name"]?.Value<string>();
+								var size = ParseSize(entry["size"]?.Value<string>());
+								AddFunction(addr, name, size, 1);
+							}
+						}
+					}
+					else if (listResult is JObject pageObj && pageObj["data"] is JArray data) {
+						foreach (var entry in data.OfType<JObject>()) {
+							var addr = entry["addr"]?.Value<string>();
+							var name = entry["name"]?.Value<string>();
+							var size = ParseSize(entry["size"]?.Value<string>());
+							AddFunction(addr, name, size, 1);
+						}
+					}
+				}
+				catch {
 				}
 			}
 
