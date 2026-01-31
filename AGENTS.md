@@ -56,6 +56,8 @@
 - 2026-01-30: Deployment — MCP resolves plugin DLLs from publish/Plugins folder for cleaner release layout.
 - 2026-01-30: Phase 5 fix — patch_codegen now escapes control characters in generated C# strings.
 - 2026-01-30: Repo hygiene — ignore publish/ output in .gitignore.
+- 2026-01-30: Docs — expanded kiln.exampleFlow with per-tool purpose + notes.
+- 2026-01-30: Docs — added best practices/common errors/recommended order and enforced exampleFlow read-before-use.
 
 ## Next Steps
 - Implement Phase 3: IDA headless analysis + symbol/typing load.
