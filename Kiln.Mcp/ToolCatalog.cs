@@ -145,6 +145,7 @@ namespace Kiln.Mcp {
 						["properties"] = new JObject {
 							["jobId"] = new JObject { ["type"] = "string" },
 							["outputPath"] = new JObject { ["type"] = "string", ["description"] = "Optional; defaults to idaOutputDir/symbols.json." },
+							["async"] = new JObject { ["type"] = "boolean", ["description"] = "Optional; run export as background job (default true)." },
 						},
 						["required"] = new JArray("jobId"),
 						["additionalProperties"] = false,
@@ -159,6 +160,7 @@ namespace Kiln.Mcp {
 							["jobId"] = new JObject { ["type"] = "string" },
 							["nameFilter"] = new JObject { ["type"] = "string", ["description"] = "Optional; only export functions containing this substring." },
 							["outputPath"] = new JObject { ["type"] = "string", ["description"] = "Optional; defaults to idaOutputDir/pseudocode.json." },
+							["async"] = new JObject { ["type"] = "boolean", ["description"] = "Optional; run export as background job (default true)." },
 						},
 						["required"] = new JArray("jobId"),
 						["additionalProperties"] = false,
@@ -262,7 +264,7 @@ namespace Kiln.Mcp {
 							["caseSensitive"] = new JObject { ["type"] = "boolean" },
 							["limit"] = new JObject { ["type"] = "integer" },
 							["snippetChars"] = new JObject { ["type"] = "integer" },
-							["autoExport"] = new JObject { ["type"] = "boolean", ["description"] = "Optional; auto-export missing pseudocode (default true)." },
+							["autoExport"] = new JObject { ["type"] = "boolean", ["description"] = "Optional; auto-export missing pseudocode in background (default true)." },
 							["autoExportLimit"] = new JObject { ["type"] = "integer", ["description"] = "Optional; cap auto-export targets (default 30)." },
 							["exportAll"] = new JObject { ["type"] = "boolean", ["description"] = "Optional; start background full export if no match (default false)." },
 						},
@@ -281,7 +283,7 @@ namespace Kiln.Mcp {
 							["ea"] = new JObject { ["type"] = "string" },
 							["caseSensitive"] = new JObject { ["type"] = "boolean" },
 							["maxChars"] = new JObject { ["type"] = "integer" },
-							["autoExport"] = new JObject { ["type"] = "boolean", ["description"] = "Optional; auto-export missing pseudocode (default true)." },
+							["autoExport"] = new JObject { ["type"] = "boolean", ["description"] = "Optional; auto-export missing pseudocode in background (default true)." },
 						},
 						["required"] = new JArray("jobId"),
 						["additionalProperties"] = false,
@@ -305,6 +307,7 @@ namespace Kiln.Mcp {
 							["caseSensitive"] = new JObject { ["type"] = "boolean" },
 							["maxTargets"] = new JObject { ["type"] = "integer", ["description"] = "Optional; cap target count (default 50)." },
 							["exportAll"] = new JObject { ["type"] = "boolean", ["description"] = "Optional; start background full export (default false)." },
+							["async"] = new JObject { ["type"] = "boolean", ["description"] = "Optional; run export as background job (default true)." },
 						},
 						["required"] = new JArray("jobId"),
 						["additionalProperties"] = false,
@@ -312,7 +315,7 @@ namespace Kiln.Mcp {
 					"analysis.pseudocode.ensure"),
 				new ToolDef(
 					"patch_codegen",
-					"Generate patch/plugin template from requirements and analysis artifacts.",
+					"Generate mod/plugin template from requirements and analysis artifacts.",
 					new JObject {
 						["type"] = "object",
 						["properties"] = new JObject {
@@ -320,6 +323,9 @@ namespace Kiln.Mcp {
 							["gameDir"] = new JObject { ["type"] = "string", ["description"] = "Optional; resolve artifacts from idaOutputDir/<game-name>." },
 							["analysisDir"] = new JObject { ["type"] = "string", ["description"] = "Optional; resolve artifacts relative to this analysis directory." },
 							["requirements"] = new JObject { ["type"] = "string" },
+							["emitPluginProject"] = new JObject { ["type"] = "boolean", ["description"] = "Optional; auto-generate per-game plugin project under modsRoot (default true)." },
+							["projectName"] = new JObject { ["type"] = "string", ["description"] = "Optional; override generated plugin project name." },
+							["pluginGuid"] = new JObject { ["type"] = "string", ["description"] = "Optional; override BepInEx plugin GUID." },
 							["analysisArtifacts"] = new JObject {
 								["type"] = "array",
 								["items"] = new JObject { ["type"] = "string" },

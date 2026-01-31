@@ -607,6 +607,27 @@ namespace Kiln.Mcp {
 			if (!File.Exists(scriptPath))
 				return ToolError(id, $"Export script not found: {scriptPath}");
 
+			var runAsync = input["async"]?.Value<bool?>() ?? true;
+			if (runAsync) {
+				var exportJob = StartIdaExportJob(
+					"ida.export.symbols",
+					databasePath,
+					scriptPath,
+					exportPath,
+					null,
+					buildSymbolsIndex: true,
+					buildPseudocodeIndex: false);
+				if (exportJob is null)
+					return ToolError(id, "Failed to start symbols export job.");
+				var payloadAsync = new JObject {
+					["jobId"] = exportJob.JobId,
+					["outputPath"] = exportPath,
+					["databasePath"] = databasePath,
+					["async"] = true,
+				};
+				return ToolOk(id, payloadAsync);
+			}
+
 			var result = RunIdaExport(config.IdaPath, databasePath, scriptPath, exportPath, null);
 			if (!result.Success)
 				return ToolError(id, $"Symbol export failed: {result.StdErr}");
@@ -647,6 +668,27 @@ namespace Kiln.Mcp {
 			var scriptPath = IdaHeadlessRunner.GetExportPseudocodeScriptPath();
 			if (!File.Exists(scriptPath))
 				return ToolError(id, $"Export script not found: {scriptPath}");
+
+			var runAsync = input["async"]?.Value<bool?>() ?? true;
+			if (runAsync) {
+				var exportJob = StartIdaExportJob(
+					"ida.export.pseudocode",
+					databasePath,
+					scriptPath,
+					exportPath,
+					nameFilter,
+					buildSymbolsIndex: false,
+					buildPseudocodeIndex: true);
+				if (exportJob is null)
+					return ToolError(id, "Failed to start pseudocode export job.");
+				var payloadAsync = new JObject {
+					["jobId"] = exportJob.JobId,
+					["outputPath"] = exportPath,
+					["databasePath"] = databasePath,
+					["async"] = true,
+				};
+				return ToolOk(id, payloadAsync);
+			}
 
 			var result = RunIdaExport(config.IdaPath, databasePath, scriptPath, exportPath, nameFilter);
 			if (!result.Success)
@@ -967,6 +1009,7 @@ namespace Kiln.Mcp {
 			var autoExported = 0;
 			var autoExportTargets = 0;
 			string? autoExportError = null;
+			string? autoExportJobId = null;
 			string? exportAllJobId = null;
 
 			SearchPseudocode(list, queryNorm, match, caseSensitive, limit, snippetChars, results, ref total);
@@ -975,19 +1018,19 @@ namespace Kiln.Mcp {
 				var candidates = SelectPseudocodeCandidates(analysisDir, query, match, caseSensitive, autoExportLimit);
 				autoExportTargets = candidates.Count;
 				if (candidates.Count > 0) {
-					var ensure = EnsurePseudocodeTargets(analysisDir, candidates, caseSensitive);
-					autoExported = ensure.Exported;
-					autoExportError = ensure.Error;
-					if (ensure.Success) {
-						list = LoadPseudocodePreferIndex(analysisDir);
-						results.Clear();
-						total = 0;
-						SearchPseudocode(list, queryNorm, match, caseSensitive, limit, snippetChars, results, ref total);
+					var exportJob = StartPseudocodeExportTargetsJob(analysisDir, candidates, caseSensitive);
+					if (exportJob is not null) {
+						autoExported = 0;
+						autoExportError = null;
+						autoExportJobId = exportJob.JobId;
+					}
+					else {
+						autoExportError = "Failed to start pseudocode export job.";
 					}
 				}
 			}
 
-			if (results.Count == 0 && exportAll) {
+			if (results.Count == 0 && exportAll && string.IsNullOrWhiteSpace(exportAllJobId)) {
 				var exportJob = StartPseudocodeExportAllJob(analysisDir);
 				if (exportJob is not null)
 					exportAllJobId = exportJob.JobId;
@@ -1002,6 +1045,10 @@ namespace Kiln.Mcp {
 			};
 			if (!string.IsNullOrWhiteSpace(autoExportError))
 				payload["autoExportError"] = autoExportError;
+			if (!string.IsNullOrWhiteSpace(autoExportJobId)) {
+				payload["autoExportStarted"] = true;
+				payload["autoExportJobId"] = autoExportJobId;
+			}
 			if (!string.IsNullOrWhiteSpace(exportAllJobId)) {
 				payload["exportAllStarted"] = true;
 				payload["exportAllJobId"] = exportAllJobId;
@@ -1026,20 +1073,22 @@ namespace Kiln.Mcp {
 			var list = LoadPseudocodePreferIndex(analysisDir);
 			var caseSensitive = input["caseSensitive"]?.Value<bool?>() ?? false;
 			var autoExport = input["autoExport"]?.Value<bool?>() ?? true;
-			var nameNorm = caseSensitive ? name : name?.ToLowerInvariant();
 			var maxChars = Math.Clamp(input["maxChars"]?.Value<int?>() ?? 4000, 500, 20000);
 
 			var found = FindPseudocodeEntry(list, name, ea, caseSensitive);
 			if (found is null && autoExport) {
 				var target = ResolvePseudocodeTarget(analysisDir, name, ea, caseSensitive);
 				if (target is not null) {
-					var ensure = EnsurePseudocodeTargets(analysisDir, new List<PseudocodeTarget> { target }, caseSensitive);
-					if (ensure.Success)
-						list = LoadPseudocodePreferIndex(analysisDir);
-					else
-						return ToolError(id, $"Pseudocode export failed: {ensure.Error ?? "unknown error"}");
+					var exportJob = StartPseudocodeExportTargetsJob(analysisDir, new List<PseudocodeTarget> { target }, caseSensitive);
+					if (exportJob is null)
+						return ToolError(id, "Failed to start pseudocode export job.");
+					var pendingPayload = new JObject {
+						["pending"] = true,
+						["exportJobId"] = exportJob.JobId,
+						["analysisDir"] = analysisDir,
+					};
+					return ToolOk(id, pendingPayload);
 				}
-				found = FindPseudocodeEntry(list, name, ea, caseSensitive);
 			}
 
 			if (found is null)
@@ -1073,6 +1122,7 @@ namespace Kiln.Mcp {
 			var exportAll = input["exportAll"]?.Value<bool?>() ?? false;
 			var caseSensitive = input["caseSensitive"]?.Value<bool?>() ?? false;
 			var maxTargets = Math.Clamp(input["maxTargets"]?.Value<int?>() ?? 50, 1, 500);
+			var runAsync = input["async"]?.Value<bool?>() ?? true;
 			var names = ReadStringArray(input["names"]);
 			var eas = ReadStringArray(input["eas"]);
 
@@ -1095,7 +1145,21 @@ namespace Kiln.Mcp {
 			if (targets.Count == 0)
 				return ToolError(id, "No resolvable pseudocode targets.");
 
-			var ensure = EnsurePseudocodeTargets(analysisDir, targets, caseSensitive);
+			if (runAsync) {
+				var exportJob = StartPseudocodeExportTargetsJob(analysisDir, targets, caseSensitive);
+				if (exportJob is null)
+					return ToolError(id, "Failed to start pseudocode export job.");
+				var payloadAsync = new JObject {
+					["requested"] = targets.Count,
+					["exported"] = 0,
+					["analysisDir"] = analysisDir,
+					["exportJobId"] = exportJob.JobId,
+					["async"] = true,
+				};
+				return ToolOk(id, payloadAsync);
+			}
+
+			var ensure = EnsurePseudocodeTargets(analysisDir, targets, caseSensitive, CancellationToken.None);
 			if (!ensure.Success)
 				return ToolError(id, $"Pseudocode export failed: {ensure.Error ?? "unknown error"}");
 
@@ -1115,6 +1179,9 @@ namespace Kiln.Mcp {
 
 			var jobId = input["jobId"]?.Value<string>();
 			var gameDir = input["gameDir"]?.Value<string>();
+			var emitPluginProject = input["emitPluginProject"]?.Value<bool?>() ?? true;
+			var projectName = input["projectName"]?.Value<string>();
+			var pluginGuid = input["pluginGuid"]?.Value<string>();
 			var analysisDir = input["analysisDir"]?.Value<string>();
 			if (string.IsNullOrWhiteSpace(analysisDir)) {
 				if (!string.IsNullOrWhiteSpace(jobId))
@@ -1146,10 +1213,39 @@ namespace Kiln.Mcp {
 				return ToolError(id, $"patch_codegen failed: {ex.Message}");
 			}
 
+			PluginProjectResult? pluginProject = null;
+			if (emitPluginProject) {
+				var projectGameDir = gameDir;
+				if (string.IsNullOrWhiteSpace(projectGameDir) && !string.IsNullOrWhiteSpace(jobId))
+					projectGameDir = ReadJobParam(jobId, "gameDir");
+				if (!string.IsNullOrWhiteSpace(projectGameDir)) {
+					try {
+						pluginProject = CreatePluginProject(projectGameDir, projectName, pluginGuid);
+					}
+					catch (Exception ex) {
+						pluginProject = new PluginProjectResult {
+							Success = false,
+							Error = ex.Message,
+						};
+					}
+				}
+			}
+
 			var payload = new JObject {
 				["outputDir"] = result.OutputDir,
 				["files"] = new JArray(result.Files),
 			};
+			if (pluginProject is not null) {
+				payload["pluginProjectEmitted"] = pluginProject.Success;
+				if (!string.IsNullOrWhiteSpace(pluginProject.ProjectDir))
+					payload["pluginProjectDir"] = pluginProject.ProjectDir;
+				if (pluginProject.Files.Count > 0)
+					payload["pluginProjectFiles"] = new JArray(pluginProject.Files);
+				if (!string.IsNullOrWhiteSpace(pluginProject.Runtime))
+					payload["pluginProjectRuntime"] = pluginProject.Runtime;
+				if (!string.IsNullOrWhiteSpace(pluginProject.Error))
+					payload["pluginProjectError"] = pluginProject.Error;
+			}
 			return ToolOk(id, payload);
 		}
 
@@ -1413,7 +1509,7 @@ namespace Kiln.Mcp {
 			return targets;
 		}
 
-		PseudocodeEnsureResult EnsurePseudocodeTargets(string analysisDir, IReadOnlyList<PseudocodeTarget> targets, bool caseSensitive) {
+		PseudocodeEnsureResult EnsurePseudocodeTargets(string analysisDir, IReadOnlyList<PseudocodeTarget> targets, bool caseSensitive, CancellationToken token) {
 			var result = new PseudocodeEnsureResult();
 			if (targets.Count == 0) {
 				result.Success = true;
@@ -1471,7 +1567,7 @@ namespace Kiln.Mcp {
 				analysisDir,
 				scriptPath,
 				null,
-				CancellationToken.None,
+				token,
 				null,
 				env).GetAwaiter().GetResult();
 
@@ -1608,6 +1704,35 @@ namespace Kiln.Mcp {
 				SavePseudocodeIndex(cacheIndex, functions);
 		}
 
+		JobRecord? StartPseudocodeExportTargetsJob(string analysisDir, IReadOnlyList<PseudocodeTarget> targets, bool caseSensitive) {
+			if (targets.Count == 0)
+				return null;
+
+			var paramsJson = new JObject {
+				["analysisDir"] = analysisDir,
+				["targets"] = new JArray(targets.Select(t => new JObject {
+					["name"] = t.Name,
+					["ea"] = t.Ea,
+				})),
+			}.ToString(Formatting.None);
+
+			return jobManager.StartJob("ida.export.pseudocode.partial", paramsJson, context => {
+				context.Update(JobState.Running, "export_pseudocode_partial", 5, null);
+				context.Log($"Exporting pseudocode targets: {targets.Count}");
+
+				var ensure = EnsurePseudocodeTargets(analysisDir, targets, caseSensitive, context.Token);
+				if (!ensure.Success) {
+					context.Log($"Pseudocode export failed: {ensure.Error ?? "unknown error"}");
+					context.Update(JobState.Failed, "failed", 100, ensure.Error);
+					return Task.CompletedTask;
+				}
+
+				context.Log($"Pseudocode export completed. Exported={ensure.Exported}");
+				context.Update(JobState.Completed, "completed", 100, null);
+				return Task.CompletedTask;
+			});
+		}
+
 		JobRecord? StartPseudocodeExportAllJob(string analysisDir) {
 			var databasePath = FindIdaDatabase(analysisDir);
 			if (string.IsNullOrWhiteSpace(databasePath))
@@ -1626,7 +1751,7 @@ namespace Kiln.Mcp {
 				context.Update(JobState.Running, "export_pseudocode", 5, null);
 				context.Log($"Exporting pseudocode: {outputPath}");
 
-				var result = RunIdaExport(config.IdaPath, databasePath, scriptPath, outputPath, null);
+				var result = RunIdaExport(config.IdaPath, databasePath, scriptPath, outputPath, null, context.Token);
 				if (!result.Success) {
 					context.Log($"Pseudocode export failed. ExitCode={result.ExitCode}");
 					context.Update(JobState.Failed, "failed", 100, result.StdErr);
@@ -1654,7 +1779,47 @@ namespace Kiln.Mcp {
 			}
 		}
 
-		static IdaAnalyzeResult RunIdaExport(string? idaPath, string databasePath, string scriptPath, string outputPath, string? nameFilter) {
+		JobRecord? StartIdaExportJob(string flowName, string databasePath, string scriptPath, string outputPath, string? nameFilter, bool buildSymbolsIndex, bool buildPseudocodeIndex) {
+			if (string.IsNullOrWhiteSpace(flowName))
+				return null;
+
+			var paramsJson = new JObject {
+				["databasePath"] = databasePath,
+				["outputPath"] = outputPath,
+				["scriptPath"] = scriptPath,
+				["nameFilter"] = nameFilter,
+			}.ToString(Formatting.None);
+
+			return jobManager.StartJob(flowName, paramsJson, context => {
+				context.Update(JobState.Running, "export_ida", 5, null);
+				context.Log($"IDA export started: {outputPath}");
+
+				var result = RunIdaExport(config.IdaPath, databasePath, scriptPath, outputPath, nameFilter, context.Token);
+				if (!result.Success) {
+					context.Log($"IDA export failed. ExitCode={result.ExitCode}");
+					context.Update(JobState.Failed, "failed", 100, result.StdErr);
+					return Task.CompletedTask;
+				}
+
+				if (buildSymbolsIndex && File.Exists(outputPath)) {
+					var symbols = LoadSymbols(outputPath);
+					SaveSymbolsIndex(Path.Combine(Path.GetDirectoryName(outputPath) ?? ".", "symbols.index.json"), symbols);
+				}
+				if (buildPseudocodeIndex && File.Exists(outputPath)) {
+					var functions = LoadPseudocode(outputPath);
+					RebuildPseudocodeIndexes(outputPath, functions);
+				}
+
+				context.Log("IDA export completed.");
+				context.Update(JobState.Completed, "completed", 100, null);
+				return Task.CompletedTask;
+			});
+		}
+
+		static IdaAnalyzeResult RunIdaExport(string? idaPath, string databasePath, string scriptPath, string outputPath, string? nameFilter) =>
+			RunIdaExport(idaPath, databasePath, scriptPath, outputPath, nameFilter, CancellationToken.None);
+
+		static IdaAnalyzeResult RunIdaExport(string? idaPath, string databasePath, string scriptPath, string outputPath, string? nameFilter, CancellationToken token) {
 			if (string.IsNullOrWhiteSpace(idaPath))
 				return new IdaAnalyzeResult(false, -1, databasePath, databasePath, string.Empty, string.Empty, "Missing idaPath.");
 			if (!File.Exists(idaPath))
@@ -1673,7 +1838,7 @@ namespace Kiln.Mcp {
 					Path.GetDirectoryName(databasePath) ?? string.Empty,
 					scriptPath,
 					null,
-					CancellationToken.None,
+					token,
 					null,
 					env).GetAwaiter().GetResult();
 			}
@@ -2321,6 +2486,246 @@ Common flow:
 Notes:
 - Use resources/list and resources/read to load embedded docs (e.g. BepInEx).";
 
+		sealed class PluginProjectResult {
+			public bool Success { get; set; }
+			public string ProjectDir { get; set; } = string.Empty;
+			public string Runtime { get; set; } = string.Empty;
+			public List<string> Files { get; } = new();
+			public string? Error { get; set; }
+		}
+
+		PluginProjectResult CreatePluginProject(string gameDir, string? projectName, string? pluginGuid) {
+			var result = new PluginProjectResult();
+			if (string.IsNullOrWhiteSpace(gameDir)) {
+				result.Error = "Missing gameDir.";
+				return result;
+			}
+			if (string.IsNullOrWhiteSpace(config.ModsRoot)) {
+				result.Error = "Missing modsRoot (set kiln.config.json).";
+				return result;
+			}
+
+			var gameRoot = config.GetModsRootForGame(gameDir);
+			Directory.CreateDirectory(gameRoot);
+			var safeGameName = Path.GetFileName(gameRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+			if (string.IsNullOrWhiteSpace(safeGameName))
+				safeGameName = "Game";
+
+			var baseProjectName = string.IsNullOrWhiteSpace(projectName) ? $"{safeGameName}.Plugin" : projectName;
+			var safeProjectName = MakeSafeFileName(baseProjectName);
+			if (string.IsNullOrWhiteSpace(safeProjectName))
+				safeProjectName = "Game.Plugin";
+
+			var projectDir = Path.Combine(gameRoot, safeProjectName);
+			if (Directory.Exists(projectDir)) {
+				projectDir = Path.Combine(gameRoot, safeProjectName + "_" + DateTime.UtcNow.ToString("yyyyMMdd_HHmmss"));
+			}
+			Directory.CreateDirectory(projectDir);
+
+			var locate = UnityLocator.Locate(gameDir);
+			var useIl2Cpp = locate.IsIl2Cpp || !locate.IsMono;
+			var runtime = useIl2Cpp ? "IL2CPP" : "Mono";
+
+			var ns = $"Kiln.Mods.{ToPascalIdentifier(safeGameName)}";
+			var className = $"{ToPascalIdentifier(safeGameName)}Plugin";
+			var guid = NormalizePluginGuid(pluginGuid, safeGameName);
+			var displayName = $"{safeGameName} Plugin";
+			var version = "1.0.0";
+
+			var csprojPath = Path.Combine(projectDir, $"{safeProjectName}.csproj");
+			var pluginPath = Path.Combine(projectDir, "Plugin.cs");
+			var readmePath = Path.Combine(projectDir, "README.txt");
+
+			File.WriteAllText(csprojPath, useIl2Cpp ? BuildIl2CppCsproj(safeProjectName) : BuildMonoCsproj(safeProjectName), Encoding.ASCII);
+			File.WriteAllText(pluginPath, useIl2Cpp
+				? BuildIl2CppPlugin(ns, className, guid, displayName, version)
+				: BuildMonoPlugin(ns, className, guid, displayName, version), Encoding.ASCII);
+			File.WriteAllText(readmePath, useIl2Cpp
+				? BuildIl2CppReadme(safeProjectName)
+				: BuildMonoReadme(safeProjectName), Encoding.ASCII);
+
+			result.Success = true;
+			result.ProjectDir = projectDir;
+			result.Runtime = runtime;
+			result.Files.Add(csprojPath);
+			result.Files.Add(pluginPath);
+			result.Files.Add(readmePath);
+			return result;
+		}
+
+		static string BuildIl2CppCsproj(string projectName) {
+			return string.Join(Environment.NewLine, new[] {
+				"<Project Sdk=\"Microsoft.NET.Sdk\">",
+				"  <PropertyGroup>",
+				"    <TargetFramework>net6.0</TargetFramework>",
+				$"    <AssemblyName>{projectName}</AssemblyName>",
+				"    <Nullable>enable</Nullable>",
+				"  </PropertyGroup>",
+				"",
+				"  <ItemGroup>",
+				"    <PackageReference Include=\"BepInEx.Unity.IL2CPP\" Version=\"6.0.0-pre.1\" />",
+				"    <PackageReference Include=\"BepInEx.PluginInfoProps\" Version=\"2.1.0\" PrivateAssets=\"all\" />",
+				"  </ItemGroup>",
+				"",
+				"  <ItemGroup>",
+				"    <Reference Include=\"Assembly-CSharp\">",
+				"      <HintPath>$(BepInExUnhollowed)\\Assembly-CSharp.dll</HintPath>",
+				"    </Reference>",
+				"    <Reference Include=\"UnityEngine.CoreModule\">",
+				"      <HintPath>$(BepInExUnhollowed)\\UnityEngine.CoreModule.dll</HintPath>",
+				"    </Reference>",
+				"  </ItemGroup>",
+				"</Project>",
+				string.Empty,
+			});
+		}
+
+		static string BuildMonoCsproj(string projectName) {
+			return string.Join(Environment.NewLine, new[] {
+				"<Project Sdk=\"Microsoft.NET.Sdk\">",
+				"  <PropertyGroup>",
+				"    <TargetFramework>net6.0</TargetFramework>",
+				$"    <AssemblyName>{projectName}</AssemblyName>",
+				"    <Nullable>enable</Nullable>",
+				"  </PropertyGroup>",
+				"",
+				"  <ItemGroup>",
+				"    <PackageReference Include=\"BepInEx\" Version=\"5.4.23\" />",
+				"    <PackageReference Include=\"BepInEx.PluginInfoProps\" Version=\"2.1.0\" PrivateAssets=\"all\" />",
+				"  </ItemGroup>",
+				"</Project>",
+				string.Empty,
+			});
+		}
+
+		static string BuildIl2CppPlugin(string ns, string className, string guid, string displayName, string version) {
+			return string.Join(Environment.NewLine, new[] {
+				"using BepInEx;",
+				"using BepInEx.Unity.IL2CPP;",
+				"using BepInEx.Logging;",
+				"",
+				$"namespace {ns}",
+				"{",
+				$"\t[BepInPlugin(\"{guid}\", \"{displayName}\", \"{version}\")]",
+				$"\tpublic class {className} : BasePlugin",
+				"\t{",
+				"\t\tinternal static ManualLogSource Log;",
+				"",
+				"\t\tpublic override void Load()",
+				"\t\t{",
+				"\t\t\tLog = base.Log;",
+				"\t\t\tLog.LogInfo(\"Plugin loaded.\");",
+				"\t\t\t// TODO: call game SDK APIs here (prefer direct calls over patching).",
+				"\t\t}",
+				"\t}",
+				"}",
+				string.Empty,
+			});
+		}
+
+		static string BuildMonoPlugin(string ns, string className, string guid, string displayName, string version) {
+			return string.Join(Environment.NewLine, new[] {
+				"using BepInEx;",
+				"using BepInEx.Logging;",
+				"",
+				$"namespace {ns}",
+				"{",
+				$"\t[BepInPlugin(\"{guid}\", \"{displayName}\", \"{version}\")]",
+				$"\tpublic class {className} : BaseUnityPlugin",
+				"\t{",
+				"\t\tinternal static ManualLogSource Log;",
+				"",
+				"\t\tprivate void Awake()",
+				"\t\t{",
+				"\t\t\tLog = Logger;",
+				"\t\t\tLog.LogInfo(\"Plugin loaded.\");",
+				"\t\t\t// TODO: call game SDK APIs here (prefer direct calls over patching).",
+				"\t\t}",
+				"\t}",
+				"}",
+				string.Empty,
+			});
+		}
+
+		static string BuildIl2CppReadme(string projectName) {
+			return string.Join(Environment.NewLine, new[] {
+				projectName + " (IL2CPP)",
+				"",
+				"Build:",
+				"  dotnet build -c Release -p:BepInExUnhollowed=\"D:\\Path\\To\\Game\\BepInEx\\unhollowed\"",
+				"",
+				"Install:",
+				"  Copy bin\\Release\\net6.0\\" + projectName + ".dll to:",
+				"  BepInEx\\plugins\\" + projectName + "\\",
+				string.Empty,
+			});
+		}
+
+		static string BuildMonoReadme(string projectName) {
+			return string.Join(Environment.NewLine, new[] {
+				projectName + " (Mono)",
+				"",
+				"Build:",
+				"  dotnet build -c Release",
+				"",
+				"Install:",
+				"  Copy bin\\Release\\net6.0\\" + projectName + ".dll to:",
+				"  BepInEx\\plugins\\" + projectName + "\\",
+				string.Empty,
+			});
+		}
+
+		static string MakeSafeFileName(string value) {
+			if (string.IsNullOrWhiteSpace(value))
+				return string.Empty;
+			var safe = value.Trim();
+			foreach (var ch in Path.GetInvalidFileNameChars())
+				safe = safe.Replace(ch, '_');
+			return safe.Trim();
+		}
+
+		static string ToPascalIdentifier(string value) {
+			if (string.IsNullOrWhiteSpace(value))
+				return "Game";
+
+			var chars = new List<char>(value.Length);
+			var nextUpper = true;
+			foreach (var ch in value) {
+				if (char.IsLetterOrDigit(ch)) {
+					var next = nextUpper ? char.ToUpperInvariant(ch) : char.ToLowerInvariant(ch);
+					chars.Add(next);
+					nextUpper = false;
+				}
+				else {
+					nextUpper = true;
+				}
+			}
+
+			var result = new string(chars.ToArray());
+			if (string.IsNullOrWhiteSpace(result))
+				result = "Game";
+			if (char.IsDigit(result[0]))
+				result = "Game" + result;
+			return result;
+		}
+
+		static string NormalizePluginGuid(string? pluginGuid, string safeGameName) {
+			if (!string.IsNullOrWhiteSpace(pluginGuid))
+				return pluginGuid.Trim();
+
+			var slugChars = new List<char>(safeGameName.Length);
+			foreach (var ch in safeGameName) {
+				if (char.IsLetterOrDigit(ch))
+					slugChars.Add(char.ToLowerInvariant(ch));
+				else
+					slugChars.Add('.');
+			}
+			var slug = new string(slugChars.ToArray());
+			var parts = slug.Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries);
+			slug = parts.Length == 0 ? "game" : string.Join(".", parts);
+			return "com.kiln." + slug + ".plugin";
+		}
+
 		const string ExampleFlowText =
 @"Kiln MCP example flow (detailed)
 
@@ -2445,7 +2850,7 @@ Common errors:
 - IDA DB not found in analysis directory.
 Recommended order:
 - After ida_analyze or ida_register_db.
-Args: { ""jobId"": ""..."" }
+Args: { ""jobId"": ""..."", ""async"": true }
 
 11) ida_export_pseudocode
 Purpose: Export pseudocode for functions (Hex-Rays).
@@ -2455,7 +2860,7 @@ Common errors:
 - Hex-Rays missing; fallback becomes disassembly.
 Recommended order:
 - After ida_export_symbols, before analysis.search.
-Args: { ""jobId"": ""..."", ""nameFilter"": ""Player"" }
+Args: { ""jobId"": ""..."", ""nameFilter"": ""Player"", ""async"": true }
 
 12) analysis.index.build
 Purpose: Build local + cached indexes (symbols, strings, pseudocode).
@@ -2511,7 +2916,7 @@ Args: { ""jobId"": ""..."", ""query"": ""weapon"", ""match"": ""contains"", ""in
 Purpose: Search pseudocode/disassembly text and return snippets.
 Best practices:
 - Use snippetChars to reduce token usage.
-- autoExport=true will export missing pseudocode for likely candidates.
+- autoExport=true will export missing pseudocode for likely candidates (background job).
 - exportAll=true starts a background full export if nothing matches.
 Common errors:
 - No pseudocode export present.
@@ -2523,7 +2928,7 @@ Args: { ""jobId"": ""..."", ""query"": ""weaponId"", ""limit"": 10, ""snippetCha
 Purpose: Fetch full pseudocode/disassembly for a function.
 Best practices:
 - Use maxChars to avoid huge responses.
-- autoExport=true will export the missing function on demand.
+- autoExport=true will export the missing function on demand (returns pending + exportJobId).
 Common errors:
 - Target not found due to name mismatch.
 Recommended order:
@@ -2539,18 +2944,19 @@ Common errors:
 - Passing empty names/eas without exportAll.
 Recommended order:
 - After analysis.symbols.search / analysis.strings.search.
-Args: { ""jobId"": ""..."", ""names"": [""Player_Update""], ""exportAll"": false }
+Args: { ""jobId"": ""..."", ""names"": [""Player_Update""], ""exportAll"": false, ""async"": true }
 
 20) patch_codegen
-Purpose: Generate patch template + target shortlist from analysis artifacts.
+Purpose: Generate mod/plugin template + target shortlist from analysis artifacts.
 Best practices:
 - Pass symbols/pseudocode/strings indexes for best results.
 - You can pass jobId/gameDir/analysisDir and list filenames only; Kiln will resolve them.
+- emitPluginProject=true generates a per-game plugin project under modsRoot.
 Common errors:
 - Empty artifacts => empty target list.
 Recommended order:
 - After analysis search identifies targets.
-Args: { ""jobId"": ""..."", ""requirements"": ""..."", ""analysisArtifacts"": [""symbols.json"", ""strings.json"", ""pseudocode.json""] }
+Args: { ""jobId"": ""..."", ""requirements"": ""..."", ""analysisArtifacts"": [""symbols.json"", ""strings.json"", ""pseudocode.json""], ""emitPluginProject"": true }
 
 21) package_mod
 Purpose: Package output directory into zip with manifest/install/rollback.
