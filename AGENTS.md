@@ -61,6 +61,7 @@
 - 2026-01-30: Release — added scripts/publish.ps1 to build and normalize publish/Kiln layout.
 - 2026-01-30: IDA 9.2 support — handle idat.exe/ida.exe naming and update config/example path.
 - 2026-01-30: Release fix — resolve IDA export scripts from publish root or Plugins folder.
+- 2026-01-30: IDA export fix — skip -o when opening existing .i64/.idb to avoid export failures.
 
 ## Next Steps
 - Implement Phase 3: IDA headless analysis + symbol/typing load.

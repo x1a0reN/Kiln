@@ -24,14 +24,16 @@ namespace Kiln.Plugins.Ida.Pro {
 
 			Directory.CreateDirectory(outputDir);
 
-			var dbPath = GetDatabasePath(idaPath, inputBinaryPath, outputDir);
+			var isDatabase = IsDatabaseFile(inputBinaryPath);
+			var dbPath = isDatabase ? inputBinaryPath : GetDatabasePath(idaPath, inputBinaryPath, outputDir);
 			var logPath = Path.Combine(outputDir, "ida.log");
 
 			var args = new List<string> {
 				"-A",
 				$"-L\"{logPath}\"",
-				$"-o\"{dbPath}\"",
 			};
+			if (!isDatabase)
+				args.Add($"-o\"{dbPath}\"");
 
 			if (!string.IsNullOrWhiteSpace(scriptPath))
 				args.Add($"-S{BuildScriptInvocation(scriptPath, scriptArgs)}");
@@ -122,6 +124,12 @@ namespace Kiln.Plugins.Ida.Pro {
 			if (string.Equals(name, "ida.exe", StringComparison.OrdinalIgnoreCase))
 				return true;
 			return false;
+		}
+
+		static bool IsDatabaseFile(string path) {
+			var ext = Path.GetExtension(path);
+			return ext.Equals(".i64", StringComparison.OrdinalIgnoreCase)
+				|| ext.Equals(".idb", StringComparison.OrdinalIgnoreCase);
 		}
 
 		static string ResolveScriptPath(string fileName) {

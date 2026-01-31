@@ -62,6 +62,7 @@
 - 2026-01-30：发布——新增 scripts/publish.ps1，一键构建并整理 publish/Kiln 目录结构。
 - 2026-01-30：IDA 9.2 适配——支持 idat.exe/ida.exe 命名并更新配置示例。
 - 2026-01-30：发布修复——导出脚本路径兼容 publish 根目录与 Plugins 目录。
+- 2026-01-30：IDA 导出修复——打开现有 .i64/.idb 时跳过 -o，避免导出失败。
 ## 下一步
 - 实现 Phase 3：IDA headless 分析 + 符号/类型加载。
 - 实现 Phase 4：符号与伪代码导出。
