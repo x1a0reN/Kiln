@@ -164,17 +164,20 @@ namespace Kiln.Plugins.Ida.Pro {
 		}
 
 		static string BuildScriptInvocation(string scriptPath, IReadOnlyList<string>? scriptArgs) {
-			var parts = new List<string> { QuoteForIda(scriptPath) };
+			var parts = new List<string> { EscapeForIdaArg(scriptPath) };
 			if (scriptArgs is not null) {
 				foreach (var arg in scriptArgs)
-					parts.Add(QuoteForIda(arg));
+					parts.Add(EscapeForIdaArg(arg));
 			}
-			return string.Join(" ", parts);
+			var inner = string.Join(" ", parts);
+			return $"\"{inner}\"";
 		}
 
-		static string QuoteForIda(string value) {
+		static string EscapeForIdaArg(string value) {
 			var escaped = value.Replace("\"", "\\\"");
-			return $"\"{escaped}\"";
+			if (escaped.IndexOfAny(new[] { ' ', '\t' }) >= 0)
+				return $"\\\"{escaped}\\\"";
+			return escaped;
 		}
 	}
 }
