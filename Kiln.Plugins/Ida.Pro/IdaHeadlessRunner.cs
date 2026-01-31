@@ -94,24 +94,15 @@ namespace Kiln.Plugins.Ida.Pro {
 		}
 
 		public static string GetAutoLoadScriptPath() {
-			var baseDir = Path.GetDirectoryName(typeof(IdaHeadlessRunner).Assembly.Location);
-			if (string.IsNullOrWhiteSpace(baseDir))
-				baseDir = AppContext.BaseDirectory;
-			return Path.Combine(baseDir, "IdaAutoLoadSymbols.py");
+			return ResolveScriptPath("IdaAutoLoadSymbols.py");
 		}
 
 		public static string GetExportSymbolsScriptPath() {
-			var baseDir = Path.GetDirectoryName(typeof(IdaHeadlessRunner).Assembly.Location);
-			if (string.IsNullOrWhiteSpace(baseDir))
-				baseDir = AppContext.BaseDirectory;
-			return Path.Combine(baseDir, "ida_export_symbols.py");
+			return ResolveScriptPath("ida_export_symbols.py");
 		}
 
 		public static string GetExportPseudocodeScriptPath() {
-			var baseDir = Path.GetDirectoryName(typeof(IdaHeadlessRunner).Assembly.Location);
-			if (string.IsNullOrWhiteSpace(baseDir))
-				baseDir = AppContext.BaseDirectory;
-			return Path.Combine(baseDir, "ida_export_pseudocode.py");
+			return ResolveScriptPath("ida_export_pseudocode.py");
 		}
 
 		public static string GetDatabasePath(string idaPath, string inputBinaryPath, string outputDir) {
@@ -131,6 +122,37 @@ namespace Kiln.Plugins.Ida.Pro {
 			if (string.Equals(name, "ida.exe", StringComparison.OrdinalIgnoreCase))
 				return true;
 			return false;
+		}
+
+		static string ResolveScriptPath(string fileName) {
+			var baseDir = Path.GetDirectoryName(typeof(IdaHeadlessRunner).Assembly.Location);
+			var appDir = AppContext.BaseDirectory;
+			var candidates = new List<string>();
+
+			if (!string.IsNullOrWhiteSpace(baseDir))
+				candidates.Add(Path.Combine(baseDir, fileName));
+			if (!string.IsNullOrWhiteSpace(appDir))
+				candidates.Add(Path.Combine(appDir, fileName));
+			if (!string.IsNullOrWhiteSpace(baseDir)) {
+				try {
+					var parent = Directory.GetParent(baseDir);
+					if (parent is not null)
+						candidates.Add(Path.Combine(parent.FullName, fileName));
+				}
+				catch {
+				}
+			}
+
+			foreach (var candidate in candidates) {
+				if (File.Exists(candidate))
+					return candidate;
+			}
+
+			if (!string.IsNullOrWhiteSpace(appDir))
+				return Path.Combine(appDir, fileName);
+			if (!string.IsNullOrWhiteSpace(baseDir))
+				return Path.Combine(baseDir, fileName);
+			return fileName;
 		}
 
 		static string BuildScriptInvocation(string scriptPath, IReadOnlyList<string>? scriptArgs) {

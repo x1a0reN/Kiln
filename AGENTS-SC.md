@@ -61,6 +61,7 @@
 - 2026-01-30：文档——补充最佳实践/常见错误/推荐顺序，并强制先读 exampleFlow。
 - 2026-01-30：发布——新增 scripts/publish.ps1，一键构建并整理 publish/Kiln 目录结构。
 - 2026-01-30：IDA 9.2 适配——支持 idat.exe/ida.exe 命名并更新配置示例。
+- 2026-01-30：发布修复——导出脚本路径兼容 publish 根目录与 Plugins 目录。
 ## 下一步
 - 实现 Phase 3：IDA headless 分析 + 符号/类型加载。
 - 实现 Phase 4：符号与伪代码导出。

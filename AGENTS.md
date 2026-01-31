@@ -60,6 +60,7 @@
 - 2026-01-30: Docs — added best practices/common errors/recommended order and enforced exampleFlow read-before-use.
 - 2026-01-30: Release — added scripts/publish.ps1 to build and normalize publish/Kiln layout.
 - 2026-01-30: IDA 9.2 support — handle idat.exe/ida.exe naming and update config/example path.
+- 2026-01-30: Release fix — resolve IDA export scripts from publish root or Plugins folder.
 
 ## Next Steps
 - Implement Phase 3: IDA headless analysis + symbol/typing load.
