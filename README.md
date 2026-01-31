@@ -61,6 +61,10 @@ Example config (kiln.config.json):
 ```json
 {
   "idaMcpEnabled": true,
+  "idaMcpAutoStart": true,
+  "idaMcpHeadless": true,
+  "idaMcpAutoStartWaitSeconds": 180,
+  "idaMcpDatabasePath": "D:\\Game\\Example\\Reverse\\GameAssembly.dll.i64",
   "idaMcpCommand": "ida-pro-mcp",
   "idaMcpArgs": [
     "--transport",
@@ -71,6 +75,7 @@ Example config (kiln.config.json):
 }
 ```
 When enabled, `tools/list` will include `ida.*` entries and `tools/call` will forward to ida-pro-mcp in real time.
+When `idaMcpAutoStart` is true, Kiln can spawn IDA with the configured database path to start the MCP server automatically.
 
 ## MCP tools
 - `kiln.help`

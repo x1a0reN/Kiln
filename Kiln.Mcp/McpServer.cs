@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Kiln.Core;
@@ -1340,7 +1341,15 @@ namespace Kiln.Mcp {
 
 			Directory.CreateDirectory(outputDir);
 
+			var databasePath = input["databasePath"]?.Value<string>();
+			var autoStartIda = input["autoStartIda"]?.Value<bool?>();
+			var allowAutoStart = autoStartIda ?? config.IdaMcpAutoStart;
+
 			var keywords = ExtractKeywords(requirements);
+			if (keywords.Count == 0) {
+				foreach (var fallback in DefaultLiveKeywords)
+					keywords.Add(fallback);
+			}
 			var maxFunctions = Math.Clamp(input["liveMaxFunctions"]?.Value<int?>() ?? 200, 10, 5000);
 			var maxDecompile = Math.Clamp(input["liveMaxDecompile"]?.Value<int?>() ?? 40, 0, 200);
 			var maxStringMatches = Math.Clamp(input["liveMaxStringMatches"]?.Value<int?>() ?? 100, 0, 10000);
@@ -1386,66 +1395,27 @@ namespace Kiln.Mcp {
 				set.Add(keyword);
 			}
 
-			async Task AddFunctionsFromListAsync(string filter, int scoreBoost) {
-				var args = new JObject {
-					["offset"] = 0,
-					["count"] = Math.Min(200, maxFunctions),
-					["filter"] = filter,
-				};
-				var result = await CallIdaToolStructuredAsync("ida.list_funcs", args, token).ConfigureAwait(false);
-				if (result is not JArray pages)
-					return;
-				foreach (var page in pages.OfType<JObject>()) {
-					if (page["data"] is not JArray data)
-						continue;
-					foreach (var func in data.OfType<JObject>()) {
-						var addr = func["addr"]?.Value<string>();
-						var name = func["name"]?.Value<string>();
-						var size = ParseSize(func["size"]?.Value<string>());
-						AddFunction(addr, name, size, scoreBoost);
-						if (functions.Count >= maxFunctions)
-							return;
-					}
-				}
-			}
-
-			if (keywords.Count == 0) {
-				await AddFunctionsFromListAsync("*", 1).ConfigureAwait(false);
-			}
-			else {
-				foreach (var keyword in keywords) {
-					await AddFunctionsFromListAsync(keyword, 3).ConfigureAwait(false);
-					if (functions.Count >= maxFunctions)
-						break;
-				}
-			}
-
 			if (keywords.Count > 0 && maxStringMatches > 0 && maxStringXrefs > 0) {
 				foreach (var keyword in keywords) {
 					var findArgs = new JObject {
-						["type"] = "string",
-						["targets"] = keyword,
+						["pattern"] = Regex.Escape(keyword),
 						["limit"] = maxStringMatches,
 						["offset"] = 0,
 					};
-					var findResult = await CallIdaToolStructuredAsync("ida.find", findArgs, token).ConfigureAwait(false);
-					if (findResult is not JArray findList)
+					var findResult = await CallIdaToolStructuredAsync("ida.find_regex", findArgs, token, databasePath, allowAutoStart).ConfigureAwait(false);
+					if (findResult is not JObject findObj)
 						continue;
 
 					var matches = new List<string>();
-					foreach (var entry in findList.OfType<JObject>()) {
-						if (entry["matches"] is not JArray found)
-							continue;
-						foreach (var match in found) {
-							var addr = match?.Value<string>();
+					if (findObj["matches"] is JArray found) {
+						foreach (var entry in found.OfType<JObject>()) {
+							var addr = entry["addr"]?.Value<string>();
 							if (string.IsNullOrWhiteSpace(addr))
 								continue;
 							matches.Add(addr);
 							if (matches.Count >= maxStringMatches)
 								break;
 						}
-						if (matches.Count >= maxStringMatches)
-							break;
 					}
 
 					if (matches.Count == 0)
@@ -1455,7 +1425,7 @@ namespace Kiln.Mcp {
 						["addrs"] = new JArray(matches),
 						["limit"] = maxStringXrefs,
 					};
-					var xrefsResult = await CallIdaToolStructuredAsync("ida.xrefs_to", xrefsArgs, token).ConfigureAwait(false);
+					var xrefsResult = await CallIdaToolStructuredAsync("ida.xrefs_to", xrefsArgs, token, databasePath, allowAutoStart).ConfigureAwait(false);
 					if (xrefsResult is not JArray xrefsList)
 						continue;
 
@@ -1534,7 +1504,7 @@ namespace Kiln.Mcp {
 					var decompileArgs = new JObject {
 						["addr"] = func.Ea,
 					};
-					var decompileResult = await CallIdaToolStructuredAsync("ida.decompile", decompileArgs, token).ConfigureAwait(false);
+					var decompileResult = await CallIdaToolStructuredAsync("ida.decompile", decompileArgs, token, databasePath, allowAutoStart).ConfigureAwait(false);
 					var code = decompileResult?["code"]?.Value<string>();
 					if (string.IsNullOrWhiteSpace(code))
 						continue;
@@ -1569,14 +1539,29 @@ namespace Kiln.Mcp {
 			return new List<string> { symbolsPath, stringsPath, pseudocodePath };
 		}
 
-		async Task<JToken?> CallIdaToolStructuredAsync(string toolName, JObject args, CancellationToken token) {
+		async Task<JToken?> CallIdaToolStructuredAsync(string toolName, JObject args, CancellationToken token, string? databasePath, bool allowAutoStart) {
 			if (idaProxy is null || !idaProxy.Enabled)
 				throw new InvalidOperationException("ida-pro-mcp proxy is disabled.");
 
 			var result = await idaProxy.CallToolAsync(toolName, args, token).ConfigureAwait(false);
 			if (result["isError"]?.Value<bool>() == true) {
 				var errorText = result["content"]?.First?["text"]?.Value<string>() ?? "ida-pro-mcp call failed.";
-				throw new InvalidOperationException(errorText);
+				if (allowAutoStart && IsIdaConnectError(errorText)) {
+					var started = await idaProxy.TryAutoStartAsync(databasePath, token).ConfigureAwait(false);
+					if (started) {
+						result = await idaProxy.CallToolAsync(toolName, args, token).ConfigureAwait(false);
+						if (result["isError"]?.Value<bool>() == true) {
+							errorText = result["content"]?.First?["text"]?.Value<string>() ?? errorText;
+							throw new InvalidOperationException(errorText);
+						}
+					}
+					else {
+						throw new InvalidOperationException(errorText);
+					}
+				}
+				else {
+					throw new InvalidOperationException(errorText);
+				}
 			}
 
 			var structured = result["structuredContent"];
@@ -1597,6 +1582,15 @@ namespace Kiln.Mcp {
 				}
 			}
 			return null;
+		}
+
+		static bool IsIdaConnectError(string text) {
+			if (string.IsNullOrWhiteSpace(text))
+				return false;
+			return text.Contains("Failed to connect to IDA Pro", StringComparison.OrdinalIgnoreCase)
+				|| text.Contains("ConnectionRefused", StringComparison.OrdinalIgnoreCase)
+				|| text.Contains("actively refused", StringComparison.OrdinalIgnoreCase)
+				|| text.Contains("拒绝", StringComparison.OrdinalIgnoreCase);
 		}
 
 		static List<string> ExtractKeywords(string requirements) {
@@ -1624,6 +1618,11 @@ namespace Kiln.Mcp {
 				.Take(24)
 				.ToList();
 		}
+
+		static readonly string[] DefaultLiveKeywords = new[] {
+			"spawn", "spawner", "enemy", "enemies", "wave", "summon", "create",
+			"monster", "mob", "npc", "boss", "endless", "story",
+		};
 
 		static void FlushToken(StringBuilder buffer, List<string> list) {
 			if (buffer.Length == 0)
@@ -3344,7 +3343,7 @@ Common errors:
 Recommended order:
 - After analysis search identifies targets.
 Args (offline): { ""jobId"": ""..."", ""requirements"": ""..."", ""analysisArtifacts"": [""symbols.json"", ""strings.json"", ""pseudocode.json""], ""emitPluginProject"": true }
-Args (live): { ""requirements"": ""..."", ""analysisMode"": ""live"", ""liveMaxFunctions"": 200, ""liveMaxDecompile"": 40, ""emitPluginProject"": true }
+Args (live): { ""requirements"": ""..."", ""analysisMode"": ""live"", ""databasePath"": ""D:\\\\Game\\\\Foo\\\\GameAssembly.i64"", ""autoStartIda"": true, ""liveMaxFunctions"": 200, ""liveMaxDecompile"": 40, ""emitPluginProject"": true }
 
 21) package_mod
 Purpose: Package output directory into zip with manifest/install/rollback.

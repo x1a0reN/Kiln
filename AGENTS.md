@@ -81,6 +81,12 @@
 - 2026-01-31: patch_codegen output switched to mod-centric templates (BepInEx plugin) with mod_targets.json, removing default HarmonyX patching.
 - 2026-01-31: Added ida-pro-mcp stdio proxy with dynamic ida.* tool sync and live tool forwarding.
 - 2026-01-31: Added live patch_codegen mode using ida-pro-mcp (no offline exports by default) and normalized ida tool schemas.
+- 2026-01-31: Added ida-pro-mcp auto-start support to launch IDA with a database for live patch_codegen.
+- 2026-01-31: Added ida-pro-mcp plugin auto-install fallback for auto-start flow.
+- 2026-01-31: Auto-start now prefers ida.exe/ida64.exe when idat.exe is configured, with launch logging.
+- 2026-01-31: Auto-start now cleans unpacked DB files and supports headless idat launch.
+- 2026-01-31: Added configurable auto-start wait time for ida-pro-mcp readiness.
+- 2026-01-31: Enforced headless idat launch for ida-pro-mcp auto-start and fail fast when only GUI IDA is available.
 
 ## Key Principles
 - Full relationships come from symbols/strings; pseudocode is on-demand with cache, exportAll is optional (default off).

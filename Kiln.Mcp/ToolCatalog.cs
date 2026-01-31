@@ -327,6 +327,8 @@ namespace Kiln.Mcp {
 							["emitPluginProject"] = new JObject { ["type"] = "boolean", ["description"] = "Optional; auto-generate per-game plugin project under modsRoot (default true)." },
 							["projectName"] = new JObject { ["type"] = "string", ["description"] = "Optional; override generated plugin project name." },
 							["pluginGuid"] = new JObject { ["type"] = "string", ["description"] = "Optional; override BepInEx plugin GUID." },
+							["databasePath"] = new JObject { ["type"] = "string", ["description"] = "Optional; IDA .i64/.idb path for live auto-start." },
+							["autoStartIda"] = new JObject { ["type"] = "boolean", ["description"] = "Optional; auto-start IDA when live mode cannot reach MCP (default true when idaMcpAutoStart=true)." },
 							["liveMaxFunctions"] = new JObject { ["type"] = "integer", ["description"] = "Optional; max live functions to consider (default 200)." },
 							["liveMaxDecompile"] = new JObject { ["type"] = "integer", ["description"] = "Optional; max live functions to decompile (default 40)." },
 							["liveMaxStringMatches"] = new JObject { ["type"] = "integer", ["description"] = "Optional; max string matches per keyword (default 100)." },

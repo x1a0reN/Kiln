@@ -5,6 +5,9 @@
   "workspaceRoot": "workspace",
   "modsRoot": "mods",
   "idaMcpEnabled": true,
+  "idaMcpAutoStart": true,
+  "idaMcpHeadless": true,
+  "idaMcpAutoStartWaitSeconds": 180,
   "idaMcpCommand": "ida-pro-mcp",
   "idaMcpArgs": [
     "--transport",
@@ -12,5 +15,6 @@
     "--ida-rpc",
     "http://127.0.0.1:13337"
   ],
-  "idaMcpWorkingDir": ""
+  "idaMcpWorkingDir": "",
+  "idaMcpDatabasePath": ""
 }

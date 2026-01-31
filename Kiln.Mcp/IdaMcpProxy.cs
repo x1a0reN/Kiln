@@ -8,6 +8,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Kiln.Core;
+using Kiln.Plugins.Ida.Pro;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -20,6 +21,11 @@ namespace Kiln.Mcp {
 		static readonly TimeSpan ToolCacheTtl = TimeSpan.FromMinutes(5);
 
 		readonly McpStdioClient client;
+		readonly KilnConfig config;
+		readonly object idaGate = new object();
+		Process? idaProcess;
+		string? idaAutoScriptPath;
+		bool pluginInstallAttempted;
 		readonly object cacheGate = new object();
 		List<IdaMcpProxyTool> cachedTools = new List<IdaMcpProxyTool>();
 		DateTime lastSyncUtc = DateTime.MinValue;
@@ -28,6 +34,7 @@ namespace Kiln.Mcp {
 		public string Prefix => ToolPrefix;
 
 		IdaMcpProxy(KilnConfig config) {
+			this.config = config ?? throw new ArgumentNullException(nameof(config));
 			Enabled = config.IdaMcpEnabled && !string.IsNullOrWhiteSpace(config.IdaMcpCommand);
 			var args = config.IdaMcpArgs ?? Array.Empty<string>();
 			client = new McpStdioClient(config.IdaMcpCommand ?? string.Empty, args, config.IdaMcpWorkingDir);
@@ -104,6 +111,303 @@ namespace Kiln.Mcp {
 			}
 		}
 
+		public async Task<bool> TryAutoStartAsync(string? databasePath, CancellationToken token) {
+			if (!Enabled || !config.IdaMcpAutoStart)
+				return false;
+
+			var idaPath = config.IdaPath;
+			if (string.IsNullOrWhiteSpace(idaPath) || !File.Exists(idaPath)) {
+				KilnLog.Warn("ida-pro-mcp auto-start skipped: idaPath not configured.");
+				return false;
+			}
+
+			EnsurePluginInstalled();
+
+			var dbPath = ResolveDatabasePath(databasePath);
+			if (string.IsNullOrWhiteSpace(dbPath) || !File.Exists(dbPath)) {
+				KilnLog.Warn("ida-pro-mcp auto-start skipped: databasePath not found.");
+				return false;
+			}
+
+			lock (idaGate) {
+				if (idaProcess is not null && !idaProcess.HasExited)
+					return true;
+				IdaHeadlessRunner.CleanupUnpackedDatabase(dbPath);
+				KilnLog.Info("ida-pro-mcp auto-start: cleaned unpacked database artifacts.");
+				StartIdaProcess(idaPath, dbPath);
+			}
+
+			var ready = await WaitForIdaReadyAsync(token).ConfigureAwait(false);
+			if (!ready)
+				KilnLog.Warn("ida-pro-mcp auto-start: IDA server not ready yet.");
+			return ready;
+		}
+
+		void EnsurePluginInstalled() {
+			if (pluginInstallAttempted)
+				return;
+
+			pluginInstallAttempted = true;
+			try {
+				var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+				var pluginDir = Path.Combine(appData, "Hex-Rays", "IDA Pro", "plugins");
+				var loaderPath = Path.Combine(pluginDir, "ida_mcp.py");
+				if (File.Exists(loaderPath))
+					return;
+
+				KilnLog.Info("ida-pro-mcp plugin not found, attempting auto-install.");
+				var installArgs = new List<string> { "--install", "--transport", "stdio" };
+				var psi = new ProcessStartInfo {
+					FileName = config.IdaMcpCommand ?? "ida-pro-mcp",
+					UseShellExecute = false,
+					RedirectStandardOutput = true,
+					RedirectStandardError = true,
+					CreateNoWindow = true,
+				};
+				foreach (var arg in installArgs)
+					psi.ArgumentList.Add(arg);
+
+				using var process = new Process { StartInfo = psi };
+				if (!process.Start())
+					return;
+				process.WaitForExit(15000);
+			}
+			catch (Exception ex) {
+				KilnLog.Warn($"ida-pro-mcp plugin auto-install failed: {ex.Message}");
+			}
+		}
+
+		string? ResolveDatabasePath(string? databasePath) {
+			if (!string.IsNullOrWhiteSpace(databasePath))
+				return databasePath;
+			if (!string.IsNullOrWhiteSpace(config.IdaMcpDatabasePath))
+				return config.IdaMcpDatabasePath;
+			return null;
+		}
+
+		async Task<bool> WaitForIdaReadyAsync(CancellationToken token) {
+			var waitSeconds = config.IdaMcpAutoStartWaitSeconds <= 0 ? 180 : config.IdaMcpAutoStartWaitSeconds;
+			var deadline = DateTime.UtcNow.AddSeconds(waitSeconds);
+			while (DateTime.UtcNow < deadline && !token.IsCancellationRequested) {
+				try {
+					await client.EnsureInitializedAsync(token, InitTimeout).ConfigureAwait(false);
+					var response = await client.SendRequestAsync("tools/list", new JObject(), token, ToolListTimeout).ConfigureAwait(false);
+					if (response["result"]?["tools"] is JArray)
+						return true;
+				}
+				catch {
+				}
+				await Task.Delay(1000, token).ConfigureAwait(false);
+			}
+			return false;
+		}
+
+		void StartIdaProcess(string idaPath, string databasePath) {
+			var launchPath = ResolveIdaLaunchPath(idaPath, config.IdaMcpHeadless);
+			if (string.IsNullOrWhiteSpace(launchPath) || !File.Exists(launchPath))
+				throw new InvalidOperationException($"IDA executable not found: {launchPath}");
+			if (config.IdaMcpHeadless && IsGuiIda(launchPath))
+				throw new InvalidOperationException("ida-pro-mcp auto-start requires idat.exe/idat64.exe when idaMcpHeadless=true.");
+			var scriptPath = GetAutoScriptPath();
+			WriteAutoScript(scriptPath);
+
+			var args = new List<string> {
+				"-S" + BuildScriptInvocation(scriptPath),
+			};
+			var logPath = Path.Combine(
+				string.IsNullOrWhiteSpace(config.WorkspaceRoot) ? AppContext.BaseDirectory : config.WorkspaceRoot,
+				"ida_mcp_ida.log");
+			args.Insert(0, $"-L{logPath}");
+			args.Add(databasePath);
+
+			var psi = new ProcessStartInfo {
+				FileName = launchPath,
+				UseShellExecute = false,
+				RedirectStandardOutput = true,
+				RedirectStandardError = true,
+				CreateNoWindow = true,
+			};
+			psi.Arguments = string.Join(" ", args.ConvertAll(QuoteForCommandLine));
+
+			idaProcess = new Process { StartInfo = psi };
+			if (!idaProcess.Start())
+				throw new InvalidOperationException("Failed to start IDA process for ida-pro-mcp.");
+			KilnLog.Info($"ida-pro-mcp auto-start launched: {psi.FileName} {psi.Arguments}");
+
+			_ = Task.Run(async () => {
+				try {
+					while (!idaProcess.HasExited) {
+						var line = await idaProcess.StandardOutput.ReadLineAsync().ConfigureAwait(false);
+						if (line is null)
+							break;
+						if (!string.IsNullOrWhiteSpace(line))
+							KilnLog.Info($"ida-mcp: {line}");
+					}
+				}
+				catch {
+				}
+			});
+
+			_ = Task.Run(async () => {
+				try {
+					while (!idaProcess.HasExited) {
+						var line = await idaProcess.StandardError.ReadLineAsync().ConfigureAwait(false);
+						if (line is null)
+							break;
+						if (!string.IsNullOrWhiteSpace(line))
+							KilnLog.Warn($"ida-mcp stderr: {line}");
+					}
+				}
+				catch {
+				}
+			});
+		}
+
+		static string ResolveIdaLaunchPath(string idaPath, bool headless) {
+			if (string.IsNullOrWhiteSpace(idaPath))
+				return idaPath;
+			var name = Path.GetFileName(idaPath);
+			if (string.IsNullOrWhiteSpace(name))
+				return idaPath;
+			var dir = Path.GetDirectoryName(idaPath);
+			if (string.IsNullOrWhiteSpace(dir))
+				return idaPath;
+
+			if (headless) {
+				if (name.Equals("ida.exe", StringComparison.OrdinalIgnoreCase) || name.Equals("ida64.exe", StringComparison.OrdinalIgnoreCase)) {
+					var idatCandidate = Path.Combine(dir, name.StartsWith("ida64", StringComparison.OrdinalIgnoreCase) ? "idat64.exe" : "idat.exe");
+					if (File.Exists(idatCandidate))
+						return idatCandidate;
+					return idaPath;
+				}
+				return idaPath;
+			}
+
+			if (!name.Equals("idat.exe", StringComparison.OrdinalIgnoreCase) && !name.Equals("idat64.exe", StringComparison.OrdinalIgnoreCase))
+				return idaPath;
+			var ida64 = Path.Combine(dir, "ida64.exe");
+			if (File.Exists(ida64))
+				return ida64;
+			var ida = Path.Combine(dir, "ida.exe");
+			if (File.Exists(ida))
+				return ida;
+			return idaPath;
+		}
+
+		static bool IsGuiIda(string path) {
+			if (string.IsNullOrWhiteSpace(path))
+				return false;
+			var name = Path.GetFileName(path);
+			if (string.IsNullOrWhiteSpace(name))
+				return false;
+			return name.Equals("ida.exe", StringComparison.OrdinalIgnoreCase)
+				|| name.Equals("ida64.exe", StringComparison.OrdinalIgnoreCase);
+		}
+
+		string GetAutoScriptPath() {
+			if (!string.IsNullOrWhiteSpace(idaAutoScriptPath))
+				return idaAutoScriptPath!;
+			var root = string.IsNullOrWhiteSpace(config.WorkspaceRoot)
+				? Path.Combine(AppContext.BaseDirectory, "workspace")
+				: config.WorkspaceRoot;
+			Directory.CreateDirectory(root);
+			idaAutoScriptPath = Path.Combine(root, "ida_mcp_autostart.py");
+			return idaAutoScriptPath;
+		}
+
+		static void WriteAutoScript(string path) {
+			const string script = 
+@"import idaapi
+import time
+
+try:
+    idaapi.auto_wait()
+except Exception:
+    pass
+
+def try_start():
+    try:
+        from ida_mcp import MCP_SERVER, IdaMcpHttpRequestHandler, init_caches
+        try:
+            init_caches()
+        except Exception as e:
+            print(""[MCP] Cache init failed: %s"" % e)
+        MCP_SERVER.serve(""127.0.0.1"", 13337, request_handler=IdaMcpHttpRequestHandler)
+        print(""[MCP] Server started via ida_mcp package"")
+        return True
+    except Exception:
+        pass
+    try:
+        idaapi.load_and_run_plugin(""MCP"", 0)
+        return True
+    except Exception:
+        pass
+    try:
+        idaapi.run_plugin(""MCP"", 0)
+        return True
+    except Exception as e:
+        print(""[MCP] Failed to start plugin: %s"" % e)
+        return False
+
+for _ in range(60):
+    if try_start():
+        break
+    time.sleep(1)
+
+while True:
+    try:
+        idaapi.qsleep(1000)
+    except Exception:
+        time.sleep(1)
+";
+			File.WriteAllText(path, script, Encoding.ASCII);
+		}
+
+		static string BuildScriptInvocation(string scriptPath) {
+			var escaped = scriptPath.Replace("\"", "\\\"");
+			return $"\"{escaped}\"";
+		}
+
+		static string QuoteForCommandLine(string arg) {
+			if (string.IsNullOrEmpty(arg))
+				return "\"\"";
+			var needsQuotes = false;
+			for (var i = 0; i < arg.Length; i++) {
+				var ch = arg[i];
+				if (char.IsWhiteSpace(ch) || ch == '\"') {
+					needsQuotes = true;
+					break;
+				}
+			}
+			if (!needsQuotes)
+				return arg;
+
+			var builder = new StringBuilder();
+			builder.Append('\"');
+			var backslashes = 0;
+			foreach (var ch in arg) {
+				if (ch == '\\') {
+					backslashes++;
+					continue;
+				}
+				if (ch == '\"') {
+					builder.Append('\\', backslashes * 2 + 1);
+					builder.Append(ch);
+					backslashes = 0;
+					continue;
+				}
+				if (backslashes > 0) {
+					builder.Append('\\', backslashes);
+					backslashes = 0;
+				}
+				builder.Append(ch);
+			}
+			if (backslashes > 0)
+				builder.Append('\\', backslashes * 2);
+			builder.Append('\"');
+			return builder.ToString();
+		}
+
 		static IEnumerable<IdaMcpProxyTool> ParseTools(JObject response) {
 			var tools = new List<IdaMcpProxyTool>();
 			var list = response["result"]?["tools"] as JArray;
@@ -154,6 +458,18 @@ namespace Kiln.Mcp {
 
 		public void Dispose() {
 			client.Dispose();
+			lock (idaGate) {
+				if (idaProcess is null)
+					return;
+				try {
+					if (!idaProcess.HasExited)
+						idaProcess.Kill(entireProcessTree: true);
+				}
+				catch {
+				}
+				idaProcess.Dispose();
+				idaProcess = null;
+			}
 		}
 	}
 

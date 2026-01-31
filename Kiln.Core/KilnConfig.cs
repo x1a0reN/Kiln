@@ -13,6 +13,10 @@ namespace Kiln.Core {
 		public string[]? IdaMcpArgs { get; set; }
 		public string? IdaMcpWorkingDir { get; set; }
 		public bool IdaMcpEnabled { get; set; }
+		public bool IdaMcpAutoStart { get; set; }
+		public string? IdaMcpDatabasePath { get; set; }
+		public bool IdaMcpHeadless { get; set; }
+		public int IdaMcpAutoStartWaitSeconds { get; set; }
 
 		public static KilnConfig Load(string? baseDirectory = null) {
 			var root = ResolveRoot(baseDirectory);
@@ -26,6 +30,10 @@ namespace Kiln.Core {
 				IdaMcpArgs = Array.Empty<string>(),
 				IdaMcpWorkingDir = string.Empty,
 				IdaMcpEnabled = false,
+				IdaMcpAutoStart = false,
+				IdaMcpDatabasePath = string.Empty,
+				IdaMcpHeadless = true,
+				IdaMcpAutoStartWaitSeconds = 180,
 			};
 
 			var configPath = Path.Combine(root, "kiln.config.json");
@@ -44,6 +52,7 @@ namespace Kiln.Core {
 				loaded.IdaPath = NormalizeOptionalPath(root, loaded.IdaPath);
 				loaded.IdaMcpCommand = NormalizeCommand(root, loaded.IdaMcpCommand);
 				loaded.IdaMcpWorkingDir = NormalizeOptionalPath(root, loaded.IdaMcpWorkingDir);
+				loaded.IdaMcpDatabasePath = NormalizeOptionalPath(root, loaded.IdaMcpDatabasePath);
 				loaded.IdaMcpArgs ??= Array.Empty<string>();
 				if (!loaded.IdaMcpEnabled && !string.IsNullOrWhiteSpace(loaded.IdaMcpCommand))
 					loaded.IdaMcpEnabled = true;
