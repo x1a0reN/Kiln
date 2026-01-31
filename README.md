@@ -27,6 +27,17 @@ Kiln is a Windows-only MCP server focused on game reverse engineering workflows,
 dotnet build Kiln.slnx -c Release
 ```
 
+## Publish (recommended)
+```
+.\scripts\publish.ps1
+```
+
+This creates `publish\Kiln\` with:
+- `Plugins\` (all Kiln.Plugins.* DLLs)
+- `Tools\Il2CppDumper\`
+- `ida\`, `workspace\`
+- `kiln.config.template.json` + `kiln.config.json` (copied if missing)
+
 ## Run (stdio MCP)
 ```
 dotnet run --project Kiln.Mcp -c Release
