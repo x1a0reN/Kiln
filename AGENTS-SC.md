@@ -74,6 +74,7 @@
 - 2026-01-31：IDA 导出兼容 — 在 get_inf_structure 不可用时回退 ida_ida.inf_get_*。
 - 2026-01-31：IDA 导出修复 — 导出前清理残留的解包数据库文件，避免锁提示。
 - 2026-01-31：伪代码按需导出 + 自动补齐搜索/获取 + 可选后台全量导出。
+- 2026-01-31：patch_codegen 支持 jobId/gameDir/analysisDir 解析相对产物并自动回退分析目录。
 ## 下一步
 - 实现 Phase 3：IDA headless 分析 + 符号/类型加载。
 - 实现 Phase 4：符号与伪代码导出。
