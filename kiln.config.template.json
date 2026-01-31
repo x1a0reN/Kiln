@@ -3,5 +3,14 @@
   "il2cppRootDir": "Tools\\\\Il2CppDumper",
   "idaOutputDir": "ida",
   "workspaceRoot": "workspace",
-  "modsRoot": "mods"
+  "modsRoot": "mods",
+  "idaMcpEnabled": false,
+  "idaMcpCommand": "ida-pro-mcp",
+  "idaMcpArgs": [
+    "--transport",
+    "stdio",
+    "--ida-rpc",
+    "http://127.0.0.1:13337"
+  ],
+  "idaMcpWorkingDir": ""
 }

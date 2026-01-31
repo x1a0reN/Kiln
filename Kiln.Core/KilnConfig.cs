@@ -9,6 +9,10 @@ namespace Kiln.Core {
 		public string IdaOutputDir { get; set; } = string.Empty;
 		public string WorkspaceRoot { get; set; } = string.Empty;
 		public string ModsRoot { get; set; } = string.Empty;
+		public string? IdaMcpCommand { get; set; }
+		public string[]? IdaMcpArgs { get; set; }
+		public string? IdaMcpWorkingDir { get; set; }
+		public bool IdaMcpEnabled { get; set; }
 
 		public static KilnConfig Load(string? baseDirectory = null) {
 			var root = ResolveRoot(baseDirectory);
@@ -18,6 +22,10 @@ namespace Kiln.Core {
 				WorkspaceRoot = Path.Combine(root, "workspace"),
 				IdaOutputDir = Path.Combine(root, "ida"),
 				ModsRoot = Path.Combine(root, "mods"),
+				IdaMcpCommand = string.Empty,
+				IdaMcpArgs = Array.Empty<string>(),
+				IdaMcpWorkingDir = string.Empty,
+				IdaMcpEnabled = false,
 			};
 
 			var configPath = Path.Combine(root, "kiln.config.json");
@@ -34,6 +42,13 @@ namespace Kiln.Core {
 					return defaults;
 
 				loaded.IdaPath = NormalizeOptionalPath(root, loaded.IdaPath);
+				loaded.IdaMcpCommand = NormalizeCommand(root, loaded.IdaMcpCommand);
+				loaded.IdaMcpWorkingDir = NormalizeOptionalPath(root, loaded.IdaMcpWorkingDir);
+				loaded.IdaMcpArgs ??= Array.Empty<string>();
+				if (!loaded.IdaMcpEnabled && !string.IsNullOrWhiteSpace(loaded.IdaMcpCommand))
+					loaded.IdaMcpEnabled = true;
+				if (string.IsNullOrWhiteSpace(loaded.IdaMcpCommand))
+					loaded.IdaMcpEnabled = false;
 				loaded.Il2CppRootDir = NormalizePathWithDefault(root, ResolveIl2CppRootDir(root, loaded), defaults.Il2CppRootDir);
 				loaded.IdaOutputDir = NormalizePathWithDefault(root, loaded.IdaOutputDir, defaults.IdaOutputDir);
 				loaded.WorkspaceRoot = NormalizePathWithDefault(root, loaded.WorkspaceRoot, defaults.WorkspaceRoot);
@@ -65,6 +80,17 @@ namespace Kiln.Core {
 				return value;
 			var combined = Path.IsPathRooted(value) ? value : Path.Combine(root, value);
 			return Path.GetFullPath(combined);
+		}
+
+		static string? NormalizeCommand(string root, string? value) {
+			if (string.IsNullOrWhiteSpace(value))
+				return value;
+			var trimmed = value.Trim();
+			if (trimmed.IndexOf(Path.DirectorySeparatorChar) >= 0 || trimmed.IndexOf(Path.AltDirectorySeparatorChar) >= 0 || trimmed.Contains(":")) {
+				var combined = Path.IsPathRooted(trimmed) ? trimmed : Path.Combine(root, trimmed);
+				return Path.GetFullPath(combined);
+			}
+			return trimmed;
 		}
 
 		static string NormalizePathWithDefault(string root, string? value, string defaultValue) {

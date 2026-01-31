@@ -79,6 +79,7 @@
 - 2026-01-31：基于 Karate.Survivor 完成端到端闭环验证（复用 i64、导出符号、按需伪代码、生成 patch 模板）。
 - 2026-01-31：新增 modsRoot 配置与 patch_codegen 自动生成按游戏划分的插件工程，并将 IDA 导出/伪代码自动导出改为后台任务避免超时。
 - 2026-01-31：patch_codegen 输出改为 MOD 导向（BepInEx 插件），生成 mod_targets.json，移除默认 HarmonyX 补丁逻辑。
+- 2026-01-31：新增 ida-pro-mcp stdio 代理，动态同步 ida.* 工具并进行实时转发。
 
 ## 关键理念
 - 关系数据以 symbols/strings 为主；伪代码按需导出并缓存，exportAll 可选且默认关闭。

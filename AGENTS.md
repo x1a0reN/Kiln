@@ -79,6 +79,7 @@
 - 2026-01-31: End-to-end IL2CPP flow validated with Karate.Survivor (reuse i64, symbols export, on-demand pseudocode, patch template).
 - 2026-01-31: Added modsRoot config + per-game plugin project generation in patch_codegen, and made IDA export/pseudocode auto-export run as background jobs to avoid tool timeouts.
 - 2026-01-31: patch_codegen output switched to mod-centric templates (BepInEx plugin) with mod_targets.json, removing default HarmonyX patching.
+- 2026-01-31: Added ida-pro-mcp stdio proxy with dynamic ida.* tool sync and live tool forwarding.
 
 ## Key Principles
 - Full relationships come from symbols/strings; pseudocode is on-demand with cache, exportAll is optional (default off).
