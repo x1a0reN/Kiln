@@ -65,6 +65,7 @@
 - 2026-01-30: IDA CLI fix — pass -S script args in a single quoted string so IDA receives parameters.
 - 2026-01-30: IDA CLI fix — pass script args as separate arguments after -S<script> to ensure ARGV is populated.
 - 2026-01-30: IDA CLI fix — build Arguments string with -S<quoted script> <quoted args> to mirror manual invocation.
+- 2026-01-30: IDA CLI fix — wrap -S invocation in a single quoted string so script args stay attached.
 
 ## Next Steps
 - Implement Phase 3: IDA headless analysis + symbol/typing load.

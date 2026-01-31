@@ -163,12 +163,18 @@ namespace Kiln.Plugins.Ida.Pro {
 		}
 
 		static string BuildScriptInvocation(string scriptPath, IReadOnlyList<string>? scriptArgs) {
-			var parts = new List<string> { QuoteForCommandLine(scriptPath) };
+			var parts = new List<string> { EscapeForIdaScriptArg(scriptPath) };
 			if (scriptArgs is not null) {
 				foreach (var arg in scriptArgs)
-					parts.Add(QuoteForCommandLine(arg));
+					parts.Add(EscapeForIdaScriptArg(arg));
 			}
-			return string.Join(" ", parts);
+			var inner = string.Join(" ", parts);
+			return $"\"{inner}\"";
+		}
+
+		static string EscapeForIdaScriptArg(string value) {
+			var escaped = value.Replace("\"", "\\\"");
+			return $"\\\"{escaped}\\\"";
 		}
 
 		static string QuoteForCommandLine(string value) {
