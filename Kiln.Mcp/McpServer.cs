@@ -20,12 +20,14 @@ namespace Kiln.Mcp {
 		readonly ResourceCatalog resources;
 		readonly JobManager jobManager;
 		readonly KilnConfig config;
+		bool hasReadExampleFlow;
 
 		public McpServer(JobManager jobManager, KilnConfig config) {
 			this.jobManager = jobManager ?? throw new ArgumentNullException(nameof(jobManager));
 			this.config = config ?? throw new ArgumentNullException(nameof(config));
 			catalog = new ToolCatalog();
 			resources = new ResourceCatalog();
+			hasReadExampleFlow = false;
 		}
 
 		public async Task RunAsync(CancellationToken token) {
@@ -145,6 +147,10 @@ namespace Kiln.Mcp {
 				return MakeError(id, -32601, $"Unknown tool: {name}");
 
 			KilnLog.Info($"tool call: {name}");
+			if (tool.Method != "__local.exampleFlow" && tool.Method != "__local.help" && !hasReadExampleFlow) {
+				return ToolError(id, "Please call kiln.exampleFlow first to read tool guidance before invoking other tools.");
+			}
+
 			if (tool.Method == "__local.help") {
 				return MakeResult(id, new JObject {
 					["content"] = new JArray {
@@ -157,6 +163,7 @@ namespace Kiln.Mcp {
 				});
 			}
 			if (tool.Method == "__local.exampleFlow") {
+				hasReadExampleFlow = true;
 				return MakeResult(id, new JObject {
 					["content"] = new JArray {
 						new JObject {
@@ -1748,13 +1755,23 @@ Notes:
 		const string ExampleFlowText =
 @"Kiln MCP example flow (detailed)
 
-0) Read the docs tools
-- kiln.exampleFlow: full usage examples (this text).
-- kiln.help: short summary and tips.
+IMPORTANT
+- You MUST call kiln.exampleFlow before using any other tool. The server enforces this.
+- Read kiln.help for a short summary, then return here for full guidance.
 
-1) Run a workflow (high-level, optional)
-Tool: workflow.run
+Recommended end-to-end order (Unity IL2CPP):
+detect_engine -> unity_locate -> il2cpp_dump (or manual dump) -> ida_analyze (or ida_register_db)
+-> ida_export_symbols -> ida_export_pseudocode -> analysis.index.build -> analysis.* search
+-> patch_codegen -> package_mod
+
+1) workflow.run (optional high-level flow)
 Purpose: Run a predefined workflow (currently Unity IL2CPP pipeline).
+Best practices:
+- Use only for quick demos; step tools below give full control.
+Common errors:
+- Missing required params (flowName/gameDir).
+Recommended order:
+- Use at the start only if you want a single job.
 Arguments:
 {
   ""flowName"": ""unity.il2cpp"",
@@ -1763,101 +1780,212 @@ Arguments:
     ""outputDir"": ""C:\\Kiln\\output""
   }
 }
-Notes:
-- outputDir is workflow-specific; step tools below are more flexible.
 Returns: { ""jobId"": ""..."" }
 
-2) Check status
-Tool: workflow.status
+2) workflow.status
 Purpose: Read job progress/stage/state.
+Best practices:
+- Poll this after workflow.run / ida_analyze.
+Common errors:
+- Unknown jobId (typo or expired job).
+Recommended order:
+- After workflow.run / ida_analyze.
 Arguments: { ""jobId"": ""..."" }
-Returns: { ""percent"": 0-100, ""stage"": ""..."", ""state"": ""Running|Completed|Failed"" }
 
-3) Tail logs
-Tool: workflow.logs
+3) workflow.logs
 Purpose: Stream recent job log lines (headless tools print here).
+Best practices:
+- Use tail=200 for quick checks; bump for deeper diagnostics.
+Common errors:
+- Job not found or already cleaned up.
+Recommended order:
+- While workflow.status shows Running/Failed.
 Arguments: { ""jobId"": ""..."", ""tail"": 200 }
 
-4) Cancel
-Tool: workflow.cancel
+4) workflow.cancel
 Purpose: Stop a running job (best-effort).
+Best practices:
+- Call only when status=Running.
+Common errors:
+- Canceling a finished job does nothing.
+Recommended order:
+- Use if ida_analyze or dump hangs.
 Arguments: { ""jobId"": ""..."" }
 
-5) Step tools (recommended for precise control)
-- detect_engine
-  Purpose: Identify Unity/Mono/IL2CPP fingerprints.
-  Notes: Use before running IL2CPP tools.
-  Args: { ""gameDir"": ""C:\\Games\\Example"" }
-- unity_locate
-  Purpose: Locate GameAssembly.dll / global-metadata.dat paths.
-  Notes: Returns IL2CPP metadata + managed/data folders.
-  Args: { ""gameDir"": ""C:\\Games\\Example"" }
-- il2cpp_dump
-  Purpose: Run Il2CppDumper to create script.json + il2cpp.h.
-  Notes:
-  - Output dir is enforced: il2cppRootDir/<game-name>.
-  - dumperPath override must match config il2cppRootDir or its Il2CppDumper.exe.
-  Args: { ""gameDir"": ""C:\\Games\\Example"" }
-- ida_analyze
-  Purpose: Run IDA headless analysis and auto-load Il2CppDumper symbols.
-  Notes:
-  - Uses idaPath from kiln.config.json (override blocked).
-  - Reuses existing DB only if metadata matches current game + dump inputs.
-  - idbDir defaults to idaOutputDir/<game-name>.
-  Args: { ""gameDir"": ""C:\\Games\\Example"", ""idaPath"": ""C:\\Program Files\\IDA Professional 9.2\\idat64.exe"", ""reuseExisting"": true }
-- ida_register_db
-  Purpose: Import a pre-existing .i64/.idb into Kiln (no re-analysis).
-  Notes:
-  - Requires script.json + il2cpp.h in il2cppRootDir/<game-name>.
-  - Writes .kiln.json metadata next to the DB.
-  - copyToIdbDir=true copies DB into idaOutputDir/<game-name>.
-  Args: { ""gameDir"": ""C:\\Games\\Example"", ""databasePath"": ""C:\\Tools\\GameAssembly.i64"", ""copyToIdbDir"": true, ""overwrite"": false }
-- ida_export_symbols
-  Purpose: Export functions, signatures, sizes, call graph, and strings.
-  Notes: Produces symbols.json + strings.json in analysis directory.
-  Args: { ""jobId"": ""..."" }
-- ida_export_pseudocode
-  Purpose: Export pseudocode for functions (Hex-Rays).
-  Notes: Falls back to disassembly if Hex-Rays not available.
-  Args: { ""jobId"": ""..."", ""nameFilter"": ""Player"" }
+5) detect_engine
+Purpose: Identify Unity/Mono/IL2CPP fingerprints in gameDir.
+Best practices:
+- Use before any Unity tools to confirm engine.
+Common errors:
+- Pointing to wrong folder (launcher root vs game root).
+Recommended order:
+- First step of the pipeline.
+Args: { ""gameDir"": ""C:\\Games\\Example"" }
 
-6) Offline analysis tools (AI-friendly search)
-- analysis.index.build
-  Purpose: Build local + cached indexes (symbols, strings, pseudocode).
-  Notes: Speeds up subsequent searches across jobs.
-  Args: { ""jobId"": ""..."" }
-- analysis.symbols.search
-  Purpose: Search symbols by name/signature/address.
-  Notes: field=name|signature|ea, match=contains|exact.
-  Args: { ""jobId"": ""..."", ""query"": ""Player"", ""field"": ""name"", ""match"": ""contains"", ""limit"": 20, ""fields"": [""name"", ""ea"", ""signature""] }
-- analysis.symbols.get
-  Purpose: Fetch full symbol entry by name or address.
-  Args: { ""jobId"": ""..."", ""name"": ""Player_Update"" }
-- analysis.symbols.xrefs
-  Purpose: Get callers/callees (call graph) for a function.
-  Args: { ""jobId"": ""..."", ""name"": ""Player_Update"", ""direction"": ""both"", ""limit"": 50 }
-- analysis.strings.search
-  Purpose: Search string literals and optionally return referencing functions.
-  Notes: includeRefs=true returns func refs for fast triage.
-  Args: { ""jobId"": ""..."", ""query"": ""weapon"", ""match"": ""contains"", ""includeRefs"": true, ""maxRefs"": 20 }
-- analysis.pseudocode.search
-  Purpose: Search pseudocode/disassembly text and return snippets.
-  Args: { ""jobId"": ""..."", ""query"": ""weaponId"", ""limit"": 10, ""snippetChars"": 300 }
-- analysis.pseudocode.get
-  Purpose: Fetch full pseudocode/disassembly for a function.
-  Args: { ""jobId"": ""..."", ""name"": ""Player_Update"", ""maxChars"": 4000 }
+6) unity_locate
+Purpose: Locate GameAssembly.dll / global-metadata.dat.
+Best practices:
+- Use after detect_engine for exact paths.
+Common errors:
+- Not IL2CPP build (no GameAssembly.dll).
+Recommended order:
+- Before il2cpp_dump or ida_analyze.
+Args: { ""gameDir"": ""C:\\Games\\Example"" }
 
-7) Patch generation + packaging
-- patch_codegen
-  Purpose: Generate patch template + target shortlist from analysis artifacts.
-  Notes: Outputs patch_targets.json + PatchTargets.cs + Plugin.cs.
-  Args: { ""requirements"": ""..."", ""analysisArtifacts"": [""...""] }
-- package_mod
-  Purpose: Package output directory into zip with manifest/install/rollback.
-  Notes: Writes package zip into outputDir.
-  Args: { ""outputDir"": ""C:\\Kiln\\output"" }
+7) il2cpp_dump
+Purpose: Run Il2CppDumper to create script.json + il2cpp.h.
+Best practices:
+- Keep Il2CppDumper and ida_with_struct_py3.py under il2cppRootDir.
+- Let Kiln choose outputDir (il2cppRootDir/<game-name>).
+Common errors:
+- Output dir mismatch (Kiln enforces it).
+- dumperPath not equal to il2cppRootDir or its Il2CppDumper.exe.
+Recommended order:
+- After unity_locate, before ida_analyze.
+Args: { ""gameDir"": ""C:\\Games\\Example"" }
 
-8) MCP resources (BepInEx docs)
+8) ida_analyze
+Purpose: Run IDA headless analysis and auto-load Il2CppDumper symbols.
+Best practices:
+- Ensure script.json + il2cpp.h exist in il2cppRootDir/<game-name>.
+- Prefer reuseExisting=true only when metadata matches.
+Common errors:
+- idaPath not matching kiln.config.json.
+- Missing ida_with_struct_py3.py in il2cppRootDir.
+Recommended order:
+- After il2cpp_dump (or manual dump), before exports.
+Args: { ""gameDir"": ""C:\\Games\\Example"", ""idaPath"": ""C:\\Program Files\\IDA Professional 9.2\\idat64.exe"", ""reuseExisting"": true }
+
+9) ida_register_db
+Purpose: Import a pre-existing .i64/.idb into Kiln (no re-analysis).
+Best practices:
+- Use when you already analyzed and loaded symbols in IDA UI.
+- Keep database path stable; enable copyToIdbDir for standard layout.
+Common errors:
+- Missing script.json/il2cpp.h under il2cppRootDir/<game-name>.
+- databasePath not a .i64/.idb file.
+Recommended order:
+- Instead of ida_analyze when you already have a DB.
+Args: { ""gameDir"": ""C:\\Games\\Example"", ""databasePath"": ""C:\\Tools\\GameAssembly.i64"", ""copyToIdbDir"": true, ""overwrite"": false }
+
+10) ida_export_symbols
+Purpose: Export functions, signatures, ranges, call graph, and strings.
+Best practices:
+- Run once per DB update; outputs symbols.json + strings.json.
+Common errors:
+- IDA DB not found in analysis directory.
+Recommended order:
+- After ida_analyze or ida_register_db.
+Args: { ""jobId"": ""..."" }
+
+11) ida_export_pseudocode
+Purpose: Export pseudocode for functions (Hex-Rays).
+Best practices:
+- Use nameFilter for smaller exports.
+Common errors:
+- Hex-Rays missing; fallback becomes disassembly.
+Recommended order:
+- After ida_export_symbols, before analysis.search.
+Args: { ""jobId"": ""..."", ""nameFilter"": ""Player"" }
+
+12) analysis.index.build
+Purpose: Build local + cached indexes (symbols, strings, pseudocode).
+Best practices:
+- Always run after exports for fast search.
+Common errors:
+- Missing symbols.json/pseudocode.json/strings.json.
+Recommended order:
+- After ida_export_symbols / ida_export_pseudocode.
+Args: { ""jobId"": ""..."" }
+
+13) analysis.symbols.search
+Purpose: Search symbols by name/signature/address.
+Best practices:
+- Use field=signature when hunting types/method signatures.
+Common errors:
+- field not one of name|signature|ea.
+Recommended order:
+- After analysis.index.build.
+Args: { ""jobId"": ""..."", ""query"": ""Player"", ""field"": ""name"", ""match"": ""contains"", ""limit"": 20, ""fields"": [""name"", ""ea"", ""signature""] }
+
+14) analysis.symbols.get
+Purpose: Fetch full symbol entry by name or address.
+Best practices:
+- Use ea for stable lookup when names are obfuscated.
+Common errors:
+- Passing both name and ea incorrectly.
+Recommended order:
+- After analysis.symbols.search.
+Args: { ""jobId"": ""..."", ""name"": ""Player_Update"" }
+
+15) analysis.symbols.xrefs
+Purpose: Get callers/callees (call graph) for a function.
+Best practices:
+- Use direction=callers when tracing who invokes a target.
+Common errors:
+- Calling without name/ea.
+Recommended order:
+- After you identify a candidate symbol.
+Args: { ""jobId"": ""..."", ""name"": ""Player_Update"", ""direction"": ""both"", ""limit"": 50 }
+
+16) analysis.strings.search
+Purpose: Search string literals and optionally return referencing functions.
+Best practices:
+- includeRefs=true to jump directly to functions.
+Common errors:
+- Missing strings.json (run ida_export_symbols first).
+Recommended order:
+- After analysis.index.build.
+Args: { ""jobId"": ""..."", ""query"": ""weapon"", ""match"": ""contains"", ""includeRefs"": true, ""maxRefs"": 20 }
+
+17) analysis.pseudocode.search
+Purpose: Search pseudocode/disassembly text and return snippets.
+Best practices:
+- Use snippetChars to reduce token usage.
+Common errors:
+- No pseudocode export present.
+Recommended order:
+- After ida_export_pseudocode and analysis.index.build.
+Args: { ""jobId"": ""..."", ""query"": ""weaponId"", ""limit"": 10, ""snippetChars"": 300 }
+
+18) analysis.pseudocode.get
+Purpose: Fetch full pseudocode/disassembly for a function.
+Best practices:
+- Use maxChars to avoid huge responses.
+Common errors:
+- Target not found due to name mismatch.
+Recommended order:
+- After analysis.pseudocode.search or analysis.symbols.get.
+Args: { ""jobId"": ""..."", ""name"": ""Player_Update"", ""maxChars"": 4000 }
+
+19) patch_codegen
+Purpose: Generate patch template + target shortlist from analysis artifacts.
+Best practices:
+- Pass symbols/pseudocode/strings indexes for best results.
+Common errors:
+- Empty artifacts => empty target list.
+Recommended order:
+- After analysis search identifies targets.
+Args: { ""requirements"": ""..."", ""analysisArtifacts"": [""...""] }
+
+20) package_mod
+Purpose: Package output directory into zip with manifest/install/rollback.
+Best practices:
+- Run after patch_codegen outputs files.
+Common errors:
+- outputDir missing or empty.
+Recommended order:
+- Final step before distribution.
+Args: { ""outputDir"": ""C:\\Kiln\\output"" }
+
+21) MCP resources (BepInEx docs)
+Purpose: Reference embedded docs (plugin structure, Harmony, IL2CPP).
+Best practices:
+- Read il2cpp-guide before writing patches.
+Common errors:
+- Unknown resource uri.
+Recommended order:
+- Anytime; helpful before patch_codegen.
 - List resources: resources/list
 - Read a resource: resources/read { ""uri"": ""bepinex://docs/il2cpp-guide"" }";
 	}
