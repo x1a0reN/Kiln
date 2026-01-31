@@ -7,6 +7,7 @@ import idaapi
 import idautils
 import ida_funcs
 import idc
+import ida_ida
 
 def _usage():
 	print("Usage: ida_export_symbols.py <output-json> [min-ea] [max-ea]")
@@ -19,6 +20,16 @@ def _parse_ea(value, default):
 		return int(value, 0)
 	except Exception:
 		return default
+
+def _get_min_max_ea():
+	try:
+		inf = idaapi.get_inf_structure()
+		return inf.min_ea, inf.max_ea
+	except Exception:
+		try:
+			return ida_ida.inf_get_min_ea(), ida_ida.inf_get_max_ea()
+		except Exception:
+			return 0, 0
 
 def _func_signature(ea):
 	ctype = idc.get_type(ea)
@@ -77,13 +88,18 @@ def _collect_strings():
 	return strings
 
 def main():
-	if len(sys.argv) < 2:
+	out_path = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("KILN_EXPORT_OUTPUT")
+	min_env = os.environ.get("KILN_EXPORT_MIN_EA")
+	max_env = os.environ.get("KILN_EXPORT_MAX_EA")
+	min_arg = sys.argv[2] if len(sys.argv) > 2 else min_env
+	max_arg = sys.argv[3] if len(sys.argv) > 3 else max_env
+	if not out_path:
 		_usage()
 		return
 
-	out_path = sys.argv[1]
-	min_ea = _parse_ea(sys.argv[2] if len(sys.argv) > 2 else None, idaapi.get_inf_structure().min_ea)
-	max_ea = _parse_ea(sys.argv[3] if len(sys.argv) > 3 else None, idaapi.get_inf_structure().max_ea)
+	default_min, default_max = _get_min_max_ea()
+	min_ea = _parse_ea(min_arg, default_min)
+	max_ea = _parse_ea(max_arg, default_max)
 
 	items = []
 	for ea in idautils.Functions(min_ea, max_ea):

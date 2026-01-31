@@ -14,7 +14,8 @@ namespace Kiln.Plugins.Ida.Pro {
 			string? scriptPath,
 			IReadOnlyList<string>? scriptArgs,
 			CancellationToken token,
-			Action<string>? log = null) {
+			Action<string>? log = null,
+			IReadOnlyDictionary<string, string>? environment = null) {
 			if (string.IsNullOrWhiteSpace(idaPath) || !File.Exists(idaPath))
 				throw new FileNotFoundException("idat64.exe not found.", idaPath);
 			if (string.IsNullOrWhiteSpace(inputBinaryPath) || !File.Exists(inputBinaryPath))
@@ -24,19 +25,21 @@ namespace Kiln.Plugins.Ida.Pro {
 
 			Directory.CreateDirectory(outputDir);
 
-			var dbPath = GetDatabasePath(idaPath, inputBinaryPath, outputDir);
+			var isDatabase = IsDatabaseFile(inputBinaryPath);
+			var dbPath = isDatabase ? inputBinaryPath : GetDatabasePath(idaPath, inputBinaryPath, outputDir);
 			var logPath = Path.Combine(outputDir, "ida.log");
 
 			var args = new List<string> {
 				"-A",
-				$"-L\"{logPath}\"",
-				$"-o\"{dbPath}\"",
+				$"-L{logPath}",
 			};
+			if (!isDatabase)
+				args.Add($"-o{dbPath}");
 
 			if (!string.IsNullOrWhiteSpace(scriptPath))
 				args.Add($"-S{BuildScriptInvocation(scriptPath, scriptArgs)}");
 
-			args.Add($"\"{inputBinaryPath}\"");
+			args.Add(inputBinaryPath);
 
 			var psi = new ProcessStartInfo {
 				FileName = idaPath,
@@ -45,8 +48,14 @@ namespace Kiln.Plugins.Ida.Pro {
 				RedirectStandardError = true,
 				CreateNoWindow = true,
 			};
-			foreach (var arg in args)
-				psi.ArgumentList.Add(arg);
+			if (environment is not null) {
+				foreach (var pair in environment) {
+					if (string.IsNullOrWhiteSpace(pair.Key))
+						continue;
+					psi.Environment[pair.Key] = pair.Value ?? string.Empty;
+				}
+			}
+			psi.Arguments = string.Join(" ", args.ConvertAll(QuoteForCommandLine));
 
 			using var process = new Process { StartInfo = psi };
 			if (!process.Start())
@@ -111,6 +120,35 @@ namespace Kiln.Plugins.Ida.Pro {
 			return Path.Combine(outputDir, Path.GetFileNameWithoutExtension(inputBinaryPath) + dbExt);
 		}
 
+		public static void CleanupUnpackedDatabase(string databasePath) {
+			if (!IsDatabaseFile(databasePath))
+				return;
+			var dir = Path.GetDirectoryName(databasePath);
+			if (string.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir))
+				return;
+			var baseName = Path.GetFileNameWithoutExtension(databasePath);
+			if (string.IsNullOrWhiteSpace(baseName))
+				return;
+
+			try {
+				foreach (var file in Directory.EnumerateFiles(dir, baseName + ".id*", SearchOption.TopDirectoryOnly))
+					TryDeleteFile(file);
+				TryDeleteFile(Path.Combine(dir, baseName + ".nam"));
+				TryDeleteFile(Path.Combine(dir, baseName + ".til"));
+			}
+			catch {
+			}
+		}
+
+		static void TryDeleteFile(string path) {
+			try {
+				if (File.Exists(path))
+					File.Delete(path);
+			}
+			catch {
+			}
+		}
+
 		static bool Is64BitIda(string idaPath) {
 			var name = Path.GetFileName(idaPath);
 			if (string.IsNullOrWhiteSpace(name))
@@ -122,6 +160,12 @@ namespace Kiln.Plugins.Ida.Pro {
 			if (string.Equals(name, "ida.exe", StringComparison.OrdinalIgnoreCase))
 				return true;
 			return false;
+		}
+
+		static bool IsDatabaseFile(string path) {
+			var ext = Path.GetExtension(path);
+			return ext.Equals(".i64", StringComparison.OrdinalIgnoreCase)
+				|| ext.Equals(".idb", StringComparison.OrdinalIgnoreCase);
 		}
 
 		static string ResolveScriptPath(string fileName) {
@@ -156,17 +200,57 @@ namespace Kiln.Plugins.Ida.Pro {
 		}
 
 		static string BuildScriptInvocation(string scriptPath, IReadOnlyList<string>? scriptArgs) {
-			var parts = new List<string> { QuoteForIda(scriptPath) };
+			var parts = new List<string> { QuoteForIdaScript(scriptPath) };
 			if (scriptArgs is not null) {
 				foreach (var arg in scriptArgs)
-					parts.Add(QuoteForIda(arg));
+					parts.Add(QuoteForIdaScript(arg));
 			}
 			return string.Join(" ", parts);
 		}
 
-		static string QuoteForIda(string value) {
+		static string QuoteForIdaScript(string value) {
 			var escaped = value.Replace("\"", "\\\"");
 			return $"\"{escaped}\"";
+		}
+
+		static string QuoteForCommandLine(string arg) {
+			if (string.IsNullOrEmpty(arg))
+				return "\"\"";
+			var needsQuotes = false;
+			for (var i = 0; i < arg.Length; i++) {
+				var ch = arg[i];
+				if (char.IsWhiteSpace(ch) || ch == '\"') {
+					needsQuotes = true;
+					break;
+				}
+			}
+			if (!needsQuotes)
+				return arg;
+
+			var builder = new System.Text.StringBuilder();
+			builder.Append('\"');
+			var backslashes = 0;
+			foreach (var ch in arg) {
+				if (ch == '\\') {
+					backslashes++;
+					continue;
+				}
+				if (ch == '\"') {
+					builder.Append('\\', backslashes * 2 + 1);
+					builder.Append(ch);
+					backslashes = 0;
+					continue;
+				}
+				if (backslashes > 0) {
+					builder.Append('\\', backslashes);
+					backslashes = 0;
+				}
+				builder.Append(ch);
+			}
+			if (backslashes > 0)
+				builder.Append('\\', backslashes * 2);
+			builder.Append('\"');
+			return builder.ToString();
 		}
 	}
 }

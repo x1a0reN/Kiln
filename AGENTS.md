@@ -61,7 +61,19 @@
 - 2026-01-30: Release — added scripts/publish.ps1 to build and normalize publish/Kiln layout.
 - 2026-01-30: IDA 9.2 support — handle idat.exe/ida.exe naming and update config/example path.
 - 2026-01-30: Release fix — resolve IDA export scripts from publish root or Plugins folder.
+- 2026-01-30: IDA export fix — skip -o when opening existing .i64/.idb to avoid export failures.
+- 2026-01-30: IDA CLI fix — pass -S script args in a single quoted string so IDA receives parameters.
+- 2026-01-30: IDA CLI fix — pass script args as separate arguments after -S<script> to ensure ARGV is populated.
+- 2026-01-30: IDA CLI fix — build Arguments string with -S<quoted script> <quoted args> to mirror manual invocation.
+- 2026-01-30: IDA CLI fix — wrap -S invocation in a single quoted string so script args stay attached.
+- 2026-01-30: IDA CLI fix — -S uses quoted script/args in Arguments string (no extra escaping).
+- 2026-01-30: IDA CLI fix — always quote -S script/args to avoid missing ARGV.
 
+- 2026-01-31: IDA CLI fix — use Windows-safe command-line quoting for -S to keep script args attached.
+- 2026-01-31: IDA scripts use env fallback for export/auto-load args to avoid -S parsing issues.
+- 2026-01-31: IDA export compat — fall back to ida_ida.inf_get_* when get_inf_structure is unavailable.
+- 2026-01-31: IDA export fix — clean stale unpacked DB files before headless export to avoid lock prompts.
+- 2026-01-31: Analysis pseudocode on-demand export + auto-export search/get + optional background full export.
 ## Next Steps
 - Implement Phase 3: IDA headless analysis + symbol/typing load.
 - Implement Phase 4: symbol and pseudocode export.

@@ -211,6 +211,8 @@ namespace Kiln.Mcp {
 				return HandleAnalysisPseudocodeSearch(id, input);
 			if (tool.Method == "analysis.pseudocode.get")
 				return HandleAnalysisPseudocodeGet(id, input);
+			if (tool.Method == "analysis.pseudocode.ensure")
+				return HandleAnalysisPseudocodeEnsure(id, input);
 			if (tool.Method == "patch_codegen")
 				return HandlePatchCodegen(id, input);
 			if (tool.Method == "package_mod")
@@ -475,14 +477,20 @@ namespace Kiln.Mcp {
 
 				IdaAnalyzeResult result;
 				try {
+					var env = new Dictionary<string, string> {
+						["KILN_SYMBOL_SCRIPT"] = symbolScriptPath,
+						["KILN_SCRIPT_JSON"] = scriptJson,
+						["KILN_IL2CPP_HEADER"] = il2cppHeader,
+					};
 					result = await IdaHeadlessRunner.RunAsync(
 						idaPath,
 						locate.GameAssemblyPath,
 						idbDir,
 						autoLoadScript,
-						new[] { symbolScriptPath, scriptJson, il2cppHeader },
+						null,
 						context.Token,
-						context.Log).ConfigureAwait(false);
+						context.Log,
+						env).ConfigureAwait(false);
 				}
 				catch (OperationCanceledException) {
 					return;
@@ -949,36 +957,55 @@ namespace Kiln.Mcp {
 			var caseSensitive = input["caseSensitive"]?.Value<bool?>() ?? false;
 			var limit = Math.Clamp(input["limit"]?.Value<int?>() ?? 10, 1, 200);
 			var snippetChars = Math.Clamp(input["snippetChars"]?.Value<int?>() ?? 300, 50, 2000);
+			var autoExport = input["autoExport"]?.Value<bool?>() ?? true;
+			var autoExportLimit = Math.Clamp(input["autoExportLimit"]?.Value<int?>() ?? 30, 1, 200);
+			var exportAll = input["exportAll"]?.Value<bool?>() ?? false;
 
 			var queryNorm = caseSensitive ? query : query!.ToLowerInvariant();
 			var results = new List<JObject>();
 			var total = 0;
+			var autoExported = 0;
+			var autoExportTargets = 0;
+			string? autoExportError = null;
+			string? exportAllJobId = null;
 
-			foreach (var entry in list) {
-				var code = entry.Pseudocode ?? string.Empty;
-				var codeNorm = caseSensitive ? code : (entry.PseudocodeLower ?? code.ToLowerInvariant());
-				var index = IndexOfMatch(codeNorm, queryNorm, match);
-				if (index < 0)
-					continue;
+			SearchPseudocode(list, queryNorm, match, caseSensitive, limit, snippetChars, results, ref total);
 
-				total++;
-				if (results.Count >= limit)
-					continue;
+			if (results.Count == 0 && autoExport) {
+				var candidates = SelectPseudocodeCandidates(analysisDir, query, match, caseSensitive, autoExportLimit);
+				autoExportTargets = candidates.Count;
+				if (candidates.Count > 0) {
+					var ensure = EnsurePseudocodeTargets(analysisDir, candidates, caseSensitive);
+					autoExported = ensure.Exported;
+					autoExportError = ensure.Error;
+					if (ensure.Success) {
+						list = LoadPseudocodePreferIndex(analysisDir);
+						results.Clear();
+						total = 0;
+						SearchPseudocode(list, queryNorm, match, caseSensitive, limit, snippetChars, results, ref total);
+					}
+				}
+			}
 
-				results.Add(new JObject {
-					["name"] = entry.Name,
-					["ea"] = entry.Ea,
-					["signature"] = entry.Signature,
-					["fallback"] = entry.Fallback,
-					["snippet"] = BuildSnippet(code, index, snippetChars),
-				});
+			if (results.Count == 0 && exportAll) {
+				var exportJob = StartPseudocodeExportAllJob(analysisDir);
+				if (exportJob is not null)
+					exportAllJobId = exportJob.JobId;
 			}
 
 			var payload = new JObject {
 				["count"] = results.Count,
 				["total"] = total,
 				["matches"] = new JArray(results),
+				["autoExported"] = autoExported,
+				["autoExportTargets"] = autoExportTargets,
 			};
+			if (!string.IsNullOrWhiteSpace(autoExportError))
+				payload["autoExportError"] = autoExportError;
+			if (!string.IsNullOrWhiteSpace(exportAllJobId)) {
+				payload["exportAllStarted"] = true;
+				payload["exportAllJobId"] = exportAllJobId;
+			}
 			return ToolOk(id, payload);
 		}
 
@@ -998,38 +1025,87 @@ namespace Kiln.Mcp {
 
 			var list = LoadPseudocodePreferIndex(analysisDir);
 			var caseSensitive = input["caseSensitive"]?.Value<bool?>() ?? false;
+			var autoExport = input["autoExport"]?.Value<bool?>() ?? true;
 			var nameNorm = caseSensitive ? name : name?.ToLowerInvariant();
 			var maxChars = Math.Clamp(input["maxChars"]?.Value<int?>() ?? 4000, 500, 20000);
 
-			foreach (var entry in list) {
-				if (!string.IsNullOrWhiteSpace(name)) {
-					var entryName = entry.Name ?? string.Empty;
-					var entryNorm = caseSensitive ? entryName : (entry.NameLower ?? entryName.ToLowerInvariant());
-					if (entryNorm != nameNorm)
-						continue;
+			var found = FindPseudocodeEntry(list, name, ea, caseSensitive);
+			if (found is null && autoExport) {
+				var target = ResolvePseudocodeTarget(analysisDir, name, ea, caseSensitive);
+				if (target is not null) {
+					var ensure = EnsurePseudocodeTargets(analysisDir, new List<PseudocodeTarget> { target }, caseSensitive);
+					if (ensure.Success)
+						list = LoadPseudocodePreferIndex(analysisDir);
+					else
+						return ToolError(id, $"Pseudocode export failed: {ensure.Error ?? "unknown error"}");
 				}
-				else if (!string.IsNullOrWhiteSpace(ea)) {
-					if (!string.Equals(entry.Ea, ea, StringComparison.OrdinalIgnoreCase))
-						continue;
-				}
-
-				var code = entry.Pseudocode ?? string.Empty;
-				var truncated = code.Length > maxChars;
-				var text = truncated ? code.Substring(0, maxChars) : code;
-				var payload = new JObject {
-					["name"] = entry.Name,
-					["ea"] = entry.Ea,
-					["endEa"] = entry.EndEa,
-					["size"] = entry.Size,
-					["signature"] = entry.Signature,
-					["pseudocode"] = text,
-					["fallback"] = entry.Fallback,
-					["truncated"] = truncated || entry.Truncated,
-				};
-				return ToolOk(id, payload);
+				found = FindPseudocodeEntry(list, name, ea, caseSensitive);
 			}
 
-			return ToolError(id, "Pseudocode not found.");
+			if (found is null)
+				return ToolError(id, "Pseudocode not found.");
+
+			var code = found.Pseudocode ?? string.Empty;
+			var truncated = code.Length > maxChars;
+			var text = truncated ? code.Substring(0, maxChars) : code;
+			var payload = new JObject {
+				["name"] = found.Name,
+				["ea"] = found.Ea,
+				["endEa"] = found.EndEa,
+				["size"] = found.Size,
+				["signature"] = found.Signature,
+				["pseudocode"] = text,
+				["fallback"] = found.Fallback,
+				["truncated"] = truncated || found.Truncated,
+			};
+			return ToolOk(id, payload);
+		}
+
+		JObject HandleAnalysisPseudocodeEnsure(JToken? id, JObject input) {
+			var jobId = input["jobId"]?.Value<string>();
+			if (string.IsNullOrWhiteSpace(jobId))
+				return ToolError(id, "Missing jobId");
+
+			var analysisDir = ResolveAnalysisDir(jobId, input);
+			if (string.IsNullOrWhiteSpace(analysisDir))
+				return ToolError(id, "Missing analysis directory (set idaOutputDir or run ida_analyze first).");
+
+			var exportAll = input["exportAll"]?.Value<bool?>() ?? false;
+			var caseSensitive = input["caseSensitive"]?.Value<bool?>() ?? false;
+			var maxTargets = Math.Clamp(input["maxTargets"]?.Value<int?>() ?? 50, 1, 500);
+			var names = ReadStringArray(input["names"]);
+			var eas = ReadStringArray(input["eas"]);
+
+			if (exportAll) {
+				var exportJob = StartPseudocodeExportAllJob(analysisDir);
+				if (exportJob is null)
+					return ToolError(id, "Failed to start pseudocode export job.");
+				var payloadAll = new JObject {
+					["exportAll"] = true,
+					["exportJobId"] = exportJob.JobId,
+					["analysisDir"] = analysisDir,
+				};
+				return ToolOk(id, payloadAll);
+			}
+
+			if ((names.Count == 0) && (eas.Count == 0))
+				return ToolError(id, "Missing names or eas");
+
+			var targets = ResolvePseudocodeTargets(analysisDir, names, eas, caseSensitive, maxTargets);
+			if (targets.Count == 0)
+				return ToolError(id, "No resolvable pseudocode targets.");
+
+			var ensure = EnsurePseudocodeTargets(analysisDir, targets, caseSensitive);
+			if (!ensure.Success)
+				return ToolError(id, $"Pseudocode export failed: {ensure.Error ?? "unknown error"}");
+
+			var payload = new JObject {
+				["requested"] = targets.Count,
+				["exported"] = ensure.Exported,
+				["analysisDir"] = analysisDir,
+				["outputPath"] = ensure.OutputPath,
+			};
+			return ToolOk(id, payload);
 		}
 
 		JObject HandlePatchCodegen(JToken? id, JObject input) {
@@ -1087,6 +1163,401 @@ namespace Kiln.Mcp {
 			return ToolOk(id, payload);
 		}
 
+		static List<string> ReadStringArray(JToken? token) {
+			var list = new List<string>();
+			if (token is not JArray arr)
+				return list;
+			foreach (var item in arr) {
+				var value = item?.Value<string>();
+				if (!string.IsNullOrWhiteSpace(value))
+					list.Add(value);
+			}
+			return list;
+		}
+
+		void SearchPseudocode(
+			List<PseudocodeEntry> list,
+			string queryNorm,
+			string match,
+			bool caseSensitive,
+			int limit,
+			int snippetChars,
+			List<JObject> results,
+			ref int total) {
+			foreach (var entry in list) {
+				var code = entry.Pseudocode ?? string.Empty;
+				var codeNorm = caseSensitive ? code : (entry.PseudocodeLower ?? code.ToLowerInvariant());
+				var index = IndexOfMatch(codeNorm, queryNorm, match);
+				if (index < 0)
+					continue;
+
+				total++;
+				if (results.Count >= limit)
+					continue;
+
+				results.Add(new JObject {
+					["name"] = entry.Name,
+					["ea"] = entry.Ea,
+					["signature"] = entry.Signature,
+					["fallback"] = entry.Fallback,
+					["snippet"] = BuildSnippet(code, index, snippetChars),
+				});
+			}
+		}
+
+		PseudocodeEntry? FindPseudocodeEntry(List<PseudocodeEntry> list, string? name, string? ea, bool caseSensitive) {
+			if (!string.IsNullOrWhiteSpace(name)) {
+				var nameNorm = caseSensitive ? name : name!.ToLowerInvariant();
+				foreach (var entry in list) {
+					var entryName = entry.Name ?? string.Empty;
+					var entryNorm = caseSensitive ? entryName : (entry.NameLower ?? entryName.ToLowerInvariant());
+					if (entryNorm == nameNorm)
+						return entry;
+				}
+				return null;
+			}
+
+			if (!string.IsNullOrWhiteSpace(ea)) {
+				var target = NormalizeEa(ea);
+				foreach (var entry in list) {
+					if (NormalizeEa(entry.Ea) == target)
+						return entry;
+				}
+			}
+
+			return null;
+		}
+
+		PseudocodeTarget? ResolvePseudocodeTarget(string analysisDir, string? name, string? ea, bool caseSensitive) {
+			if (!string.IsNullOrWhiteSpace(ea))
+				return new PseudocodeTarget { Ea = NormalizeEa(ea), Name = name };
+
+			if (string.IsNullOrWhiteSpace(name))
+				return null;
+
+			var symbols = LoadSymbolsPreferIndex(analysisDir);
+			var symbol = FindSymbol(symbols, name, null, caseSensitive);
+			if (symbol is null)
+				return new PseudocodeTarget { Name = name };
+
+			return new PseudocodeTarget { Name = symbol.Name, Ea = symbol.Ea };
+		}
+
+		List<PseudocodeTarget> ResolvePseudocodeTargets(string analysisDir, List<string> names, List<string> eas, bool caseSensitive, int maxTargets) {
+			var targets = new List<PseudocodeTarget>();
+			var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+			var symbols = names.Count == 0 ? new List<SymbolEntry>() : LoadSymbolsPreferIndex(analysisDir);
+
+			foreach (var ea in eas) {
+				if (targets.Count >= maxTargets)
+					break;
+				var norm = NormalizeEa(ea);
+				if (string.IsNullOrWhiteSpace(norm))
+					continue;
+				var key = "ea:" + norm;
+				if (seen.Add(key))
+					targets.Add(new PseudocodeTarget { Ea = norm });
+			}
+
+			foreach (var name in names) {
+				if (targets.Count >= maxTargets)
+					break;
+				if (string.IsNullOrWhiteSpace(name))
+					continue;
+				var symbol = FindSymbol(symbols, name, null, caseSensitive);
+				var resolvedName = symbol?.Name ?? name;
+				var resolvedEa = symbol?.Ea;
+				var key = !string.IsNullOrWhiteSpace(resolvedEa)
+					? "ea:" + NormalizeEa(resolvedEa)
+					: "name:" + (caseSensitive ? resolvedName : resolvedName.ToLowerInvariant());
+				if (seen.Add(key))
+					targets.Add(new PseudocodeTarget { Name = resolvedName, Ea = resolvedEa });
+			}
+
+			return targets;
+		}
+
+		List<PseudocodeTarget> SelectPseudocodeCandidates(string analysisDir, string query, string match, bool caseSensitive, int limit) {
+			var targets = new List<PseudocodeTarget>();
+			var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+			var queryNorm = caseSensitive ? query : query.ToLowerInvariant();
+
+			void AddTarget(string? name, string? ea) {
+				if (targets.Count >= limit)
+					return;
+				var key = !string.IsNullOrWhiteSpace(ea)
+					? "ea:" + NormalizeEa(ea)
+					: "name:" + (caseSensitive ? (name ?? string.Empty) : (name ?? string.Empty).ToLowerInvariant());
+				if (string.IsNullOrWhiteSpace(key))
+					return;
+				if (!seen.Add(key))
+					return;
+				targets.Add(new PseudocodeTarget { Name = name, Ea = ea });
+			}
+
+			var symbols = LoadSymbolsPreferIndex(analysisDir);
+			foreach (var entry in symbols) {
+				if (targets.Count >= limit)
+					break;
+				var name = entry.Name ?? string.Empty;
+				var sig = entry.Signature ?? string.Empty;
+				var nameNorm = caseSensitive ? name : (entry.NameLower ?? name.ToLowerInvariant());
+				var sigNorm = caseSensitive ? sig : (entry.SignatureLower ?? sig.ToLowerInvariant());
+				if (IsMatch(nameNorm, queryNorm, match) || IsMatch(sigNorm, queryNorm, match))
+					AddTarget(entry.Name, entry.Ea);
+			}
+
+			if (targets.Count >= limit)
+				return targets;
+
+			var strings = LoadStringsPreferIndex(analysisDir);
+			foreach (var entry in strings) {
+				if (targets.Count >= limit)
+					break;
+				var value = entry.Value ?? string.Empty;
+				var valueNorm = caseSensitive ? value : (entry.ValueLower ?? value.ToLowerInvariant());
+				if (!IsMatch(valueNorm, queryNorm, match))
+					continue;
+				if (entry.Refs is null)
+					continue;
+				foreach (var r in entry.Refs) {
+					AddTarget(r.FuncName, r.FuncEa);
+					if (targets.Count >= limit)
+						break;
+				}
+			}
+
+			return targets;
+		}
+
+		PseudocodeEnsureResult EnsurePseudocodeTargets(string analysisDir, IReadOnlyList<PseudocodeTarget> targets, bool caseSensitive) {
+			var result = new PseudocodeEnsureResult();
+			if (targets.Count == 0) {
+				result.Success = true;
+				return result;
+			}
+
+			var pseudocodePath = Path.Combine(analysisDir, "pseudocode.json");
+			var existing = File.Exists(pseudocodePath) ? LoadPseudocode(pseudocodePath) : new List<PseudocodeEntry>();
+			var missing = FilterMissingPseudocodeTargets(existing, targets, caseSensitive);
+			result.Requested = targets.Count;
+
+			if (missing.Count == 0) {
+				result.Success = true;
+				result.Exported = 0;
+				result.OutputPath = pseudocodePath;
+				return result;
+			}
+
+			var databasePath = FindIdaDatabase(analysisDir);
+			if (string.IsNullOrWhiteSpace(databasePath)) {
+				result.Error = "IDA database not found (expected .i64/.idb in analysis directory).";
+				return result;
+			}
+
+			var scriptPath = IdaHeadlessRunner.GetExportPseudocodeScriptPath();
+			if (!File.Exists(scriptPath)) {
+				result.Error = $"Export script not found: {scriptPath}";
+				return result;
+			}
+			var idaPath = config.IdaPath;
+			if (string.IsNullOrWhiteSpace(idaPath)) {
+				result.Error = "Missing idaPath (set kiln.config.json).";
+				return result;
+			}
+			if (!File.Exists(idaPath)) {
+				result.Error = $"idaPath not found: {idaPath}";
+				return result;
+			}
+
+			var partialPath = Path.Combine(analysisDir, "pseudocode.partial.json");
+			var names = missing.Where(t => !string.IsNullOrWhiteSpace(t.Name)).Select(t => t.Name!).ToList();
+			var eas = missing.Where(t => !string.IsNullOrWhiteSpace(t.Ea)).Select(t => t.Ea!).ToList();
+			var env = new Dictionary<string, string> {
+				["KILN_EXPORT_OUTPUT"] = partialPath,
+			};
+			if (names.Count > 0)
+				env["KILN_EXPORT_NAMES"] = JsonConvert.SerializeObject(names);
+			if (eas.Count > 0)
+				env["KILN_EXPORT_EAS"] = JsonConvert.SerializeObject(eas);
+
+			IdaHeadlessRunner.CleanupUnpackedDatabase(databasePath);
+			var export = IdaHeadlessRunner.RunAsync(
+				idaPath,
+				databasePath,
+				analysisDir,
+				scriptPath,
+				null,
+				CancellationToken.None,
+				null,
+				env).GetAwaiter().GetResult();
+
+			if (!export.Success) {
+				result.Error = export.StdErr;
+				return result;
+			}
+
+			var incoming = LoadPseudocode(partialPath);
+			var merged = MergePseudocode(existing, incoming);
+			SavePseudocodeJson(pseudocodePath, merged);
+			RebuildPseudocodeIndexes(pseudocodePath, merged);
+			result.Success = true;
+			result.Exported = incoming.Count;
+			result.OutputPath = pseudocodePath;
+			return result;
+		}
+
+		List<PseudocodeTarget> FilterMissingPseudocodeTargets(List<PseudocodeEntry> existing, IReadOnlyList<PseudocodeTarget> targets, bool caseSensitive) {
+			var existingEas = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+			var existingNames = new HashSet<string>(caseSensitive ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase);
+
+			foreach (var entry in existing) {
+				if (!string.IsNullOrWhiteSpace(entry.Ea))
+					existingEas.Add(NormalizeEa(entry.Ea));
+				if (!string.IsNullOrWhiteSpace(entry.Name))
+					existingNames.Add(caseSensitive ? entry.Name : entry.Name!.ToLowerInvariant());
+			}
+
+			var missing = new List<PseudocodeTarget>();
+			var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+			foreach (var target in targets) {
+				var normEa = NormalizeEa(target.Ea);
+				var nameNorm = caseSensitive ? target.Name : target.Name?.ToLowerInvariant();
+				if (!string.IsNullOrWhiteSpace(normEa) && existingEas.Contains(normEa))
+					continue;
+				if (!string.IsNullOrWhiteSpace(nameNorm) && existingNames.Contains(nameNorm))
+					continue;
+
+				var key = !string.IsNullOrWhiteSpace(normEa) ? "ea:" + normEa : "name:" + (nameNorm ?? string.Empty);
+				if (seen.Add(key))
+					missing.Add(target);
+			}
+			return missing;
+		}
+
+		List<PseudocodeEntry> MergePseudocode(List<PseudocodeEntry> existing, List<PseudocodeEntry> incoming) {
+			var map = new Dictionary<string, PseudocodeEntry>(StringComparer.OrdinalIgnoreCase);
+			foreach (var entry in existing) {
+				var key = BuildPseudocodeKey(entry);
+				if (!string.IsNullOrWhiteSpace(key))
+					map[key] = entry;
+			}
+			foreach (var entry in incoming) {
+				var key = BuildPseudocodeKey(entry);
+				if (!string.IsNullOrWhiteSpace(key))
+					map[key] = entry;
+			}
+
+			var list = map.Values.ToList();
+			list.Sort((a, b) => {
+				var left = TryParseEa(NormalizeEa(a.Ea));
+				var right = TryParseEa(NormalizeEa(b.Ea));
+				if (left.HasValue && right.HasValue)
+					return left.Value.CompareTo(right.Value);
+				if (left.HasValue)
+					return -1;
+				if (right.HasValue)
+					return 1;
+				return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+			});
+			return list;
+		}
+
+		string BuildPseudocodeKey(PseudocodeEntry entry) {
+			if (!string.IsNullOrWhiteSpace(entry.Ea))
+				return "ea:" + NormalizeEa(entry.Ea);
+			if (!string.IsNullOrWhiteSpace(entry.Name))
+				return "name:" + entry.Name!.ToLowerInvariant();
+			return string.Empty;
+		}
+
+		static ulong? TryParseEa(string? value) {
+			if (string.IsNullOrWhiteSpace(value))
+				return null;
+			var text = value.Trim();
+			if (text.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+				text = text[2..];
+			if (ulong.TryParse(text, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var hex))
+				return hex;
+			if (ulong.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var dec))
+				return dec;
+			return null;
+		}
+
+		void SavePseudocodeJson(string path, List<PseudocodeEntry> functions) {
+			Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ".");
+			var items = new JArray();
+			var anyFallback = false;
+			var allFallback = true;
+			foreach (var entry in functions) {
+				var fallback = entry.Fallback;
+				if (!string.IsNullOrWhiteSpace(fallback))
+					anyFallback = true;
+				else
+					allFallback = false;
+				items.Add(new JObject {
+					["name"] = entry.Name,
+					["ea"] = entry.Ea,
+					["endEa"] = entry.EndEa,
+					["size"] = entry.Size,
+					["signature"] = entry.Signature,
+					["pseudocode"] = entry.Pseudocode,
+					["fallback"] = entry.Fallback,
+					["truncated"] = entry.Truncated,
+				});
+			}
+
+			var root = new JObject {
+				["count"] = functions.Count,
+				["functions"] = items,
+			};
+			if (anyFallback)
+				root["fallbackMode"] = allFallback ? "disasm" : "mixed";
+			File.WriteAllText(path, root.ToString(Formatting.Indented));
+		}
+
+		void RebuildPseudocodeIndexes(string pseudocodePath, List<PseudocodeEntry> functions) {
+			var analysisDir = Path.GetDirectoryName(pseudocodePath) ?? ".";
+			var localIndex = Path.Combine(analysisDir, "pseudocode.index.json");
+			SavePseudocodeIndex(localIndex, functions);
+			var cacheIndex = GetIndexCachePath(pseudocodePath, "pseudocode.index.json");
+			if (!PathsEqual(localIndex, cacheIndex))
+				SavePseudocodeIndex(cacheIndex, functions);
+		}
+
+		JobRecord? StartPseudocodeExportAllJob(string analysisDir) {
+			var databasePath = FindIdaDatabase(analysisDir);
+			if (string.IsNullOrWhiteSpace(databasePath))
+				return null;
+			var scriptPath = IdaHeadlessRunner.GetExportPseudocodeScriptPath();
+			if (!File.Exists(scriptPath))
+				return null;
+
+			var outputPath = Path.Combine(analysisDir, "pseudocode.json");
+			var paramsJson = new JObject {
+				["analysisDir"] = analysisDir,
+				["outputPath"] = outputPath,
+			}.ToString(Formatting.None);
+
+			return jobManager.StartJob("ida.export.pseudocode", paramsJson, context => {
+				context.Update(JobState.Running, "export_pseudocode", 5, null);
+				context.Log($"Exporting pseudocode: {outputPath}");
+
+				var result = RunIdaExport(config.IdaPath, databasePath, scriptPath, outputPath, null);
+				if (!result.Success) {
+					context.Log($"Pseudocode export failed. ExitCode={result.ExitCode}");
+					context.Update(JobState.Failed, "failed", 100, result.StdErr);
+					return Task.CompletedTask;
+				}
+
+				var functions = LoadPseudocode(outputPath);
+				RebuildPseudocodeIndexes(outputPath, functions);
+				context.Log("Pseudocode export completed.");
+				context.Update(JobState.Completed, "completed", 100, null);
+				return Task.CompletedTask;
+			});
+		}
+
 		static bool PathsEqual(string left, string right) {
 			try {
 				var leftFull = Path.GetFullPath(left)
@@ -1106,20 +1577,22 @@ namespace Kiln.Mcp {
 			if (!File.Exists(idaPath))
 				return new IdaAnalyzeResult(false, -1, databasePath, databasePath, string.Empty, string.Empty, $"idaPath not found: {idaPath}");
 
-			var args = new List<string> {
-				outputPath,
-			};
-			if (!string.IsNullOrWhiteSpace(nameFilter))
-				args.Add(nameFilter);
-
 			try {
+				var env = new Dictionary<string, string> {
+					["KILN_EXPORT_OUTPUT"] = outputPath,
+				};
+				if (!string.IsNullOrWhiteSpace(nameFilter))
+					env["KILN_EXPORT_FILTER"] = nameFilter;
+				IdaHeadlessRunner.CleanupUnpackedDatabase(databasePath);
 				return IdaHeadlessRunner.RunAsync(
 					idaPath,
 					databasePath,
 					Path.GetDirectoryName(databasePath) ?? string.Empty,
 					scriptPath,
-					args,
-					CancellationToken.None).GetAwaiter().GetResult();
+					null,
+					CancellationToken.None,
+					null,
+					env).GetAwaiter().GetResult();
 			}
 			catch (Exception ex) {
 				return new IdaAnalyzeResult(false, -1, databasePath, databasePath, string.Empty, string.Empty, ex.Message);
@@ -1670,6 +2143,19 @@ namespace Kiln.Mcp {
 			public bool Truncated { get; set; }
 		}
 
+		sealed class PseudocodeTarget {
+			public string? Name { get; set; }
+			public string? Ea { get; set; }
+		}
+
+		sealed class PseudocodeEnsureResult {
+			public bool Success { get; set; }
+			public int Requested { get; set; }
+			public int Exported { get; set; }
+			public string? OutputPath { get; set; }
+			public string? Error { get; set; }
+		}
+
 		sealed class StringEntry {
 			public string Ea { get; set; } = string.Empty;
 			public string? Value { get; set; }
@@ -1942,23 +2428,37 @@ Args: { ""jobId"": ""..."", ""query"": ""weapon"", ""match"": ""contains"", ""in
 Purpose: Search pseudocode/disassembly text and return snippets.
 Best practices:
 - Use snippetChars to reduce token usage.
+- autoExport=true will export missing pseudocode for likely candidates.
+- exportAll=true starts a background full export if nothing matches.
 Common errors:
 - No pseudocode export present.
 Recommended order:
 - After ida_export_pseudocode and analysis.index.build.
-Args: { ""jobId"": ""..."", ""query"": ""weaponId"", ""limit"": 10, ""snippetChars"": 300 }
+Args: { ""jobId"": ""..."", ""query"": ""weaponId"", ""limit"": 10, ""snippetChars"": 300, ""autoExport"": true, ""autoExportLimit"": 30 }
 
 18) analysis.pseudocode.get
 Purpose: Fetch full pseudocode/disassembly for a function.
 Best practices:
 - Use maxChars to avoid huge responses.
+- autoExport=true will export the missing function on demand.
 Common errors:
 - Target not found due to name mismatch.
 Recommended order:
 - After analysis.pseudocode.search or analysis.symbols.get.
-Args: { ""jobId"": ""..."", ""name"": ""Player_Update"", ""maxChars"": 4000 }
+Args: { ""jobId"": ""..."", ""name"": ""Player_Update"", ""maxChars"": 4000, ""autoExport"": true }
 
-19) patch_codegen
+19) analysis.pseudocode.ensure
+Purpose: Ensure pseudocode exists for specific functions (prefetch cache).
+Best practices:
+- Use after candidate search to pre-warm.
+- exportAll=true starts a background full export (slow).
+Common errors:
+- Passing empty names/eas without exportAll.
+Recommended order:
+- After analysis.symbols.search / analysis.strings.search.
+Args: { ""jobId"": ""..."", ""names"": [""Player_Update""], ""exportAll"": false }
+
+20) patch_codegen
 Purpose: Generate patch template + target shortlist from analysis artifacts.
 Best practices:
 - Pass symbols/pseudocode/strings indexes for best results.
@@ -1968,7 +2468,7 @@ Recommended order:
 - After analysis search identifies targets.
 Args: { ""requirements"": ""..."", ""analysisArtifacts"": [""...""] }
 
-20) package_mod
+21) package_mod
 Purpose: Package output directory into zip with manifest/install/rollback.
 Best practices:
 - Run after patch_codegen outputs files.
@@ -1978,7 +2478,7 @@ Recommended order:
 - Final step before distribution.
 Args: { ""outputDir"": ""C:\\Kiln\\output"" }
 
-21) MCP resources (BepInEx docs)
+22) MCP resources (BepInEx docs)
 Purpose: Reference embedded docs (plugin structure, Harmony, IL2CPP).
 Best practices:
 - Read il2cpp-guide before writing patches.
