@@ -14,7 +14,8 @@ namespace Kiln.Plugins.Ida.Pro {
 			string? scriptPath,
 			IReadOnlyList<string>? scriptArgs,
 			CancellationToken token,
-			Action<string>? log = null) {
+			Action<string>? log = null,
+			IReadOnlyDictionary<string, string>? environment = null) {
 			if (string.IsNullOrWhiteSpace(idaPath) || !File.Exists(idaPath))
 				throw new FileNotFoundException("idat64.exe not found.", idaPath);
 			if (string.IsNullOrWhiteSpace(inputBinaryPath) || !File.Exists(inputBinaryPath))
@@ -30,24 +31,31 @@ namespace Kiln.Plugins.Ida.Pro {
 
 			var args = new List<string> {
 				"-A",
-				$"-L{QuoteForCommandLine(logPath)}",
+				$"-L{logPath}",
 			};
 			if (!isDatabase)
-				args.Add($"-o{QuoteForCommandLine(dbPath)}");
+				args.Add($"-o{dbPath}");
 
 			if (!string.IsNullOrWhiteSpace(scriptPath))
 				args.Add($"-S{BuildScriptInvocation(scriptPath, scriptArgs)}");
 
-			args.Add(QuoteForCommandLine(inputBinaryPath));
+			args.Add(inputBinaryPath);
 
 			var psi = new ProcessStartInfo {
 				FileName = idaPath,
-				Arguments = string.Join(" ", args),
 				UseShellExecute = false,
 				RedirectStandardOutput = true,
 				RedirectStandardError = true,
 				CreateNoWindow = true,
 			};
+			if (environment is not null) {
+				foreach (var pair in environment) {
+					if (string.IsNullOrWhiteSpace(pair.Key))
+						continue;
+					psi.Environment[pair.Key] = pair.Value ?? string.Empty;
+				}
+			}
+			psi.Arguments = string.Join(" ", args.ConvertAll(QuoteForCommandLine));
 
 			using var process = new Process { StartInfo = psi };
 			if (!process.Start())
@@ -110,6 +118,35 @@ namespace Kiln.Plugins.Ida.Pro {
 			var is64 = Is64BitIda(idaPath);
 			var dbExt = is64 ? ".i64" : ".idb";
 			return Path.Combine(outputDir, Path.GetFileNameWithoutExtension(inputBinaryPath) + dbExt);
+		}
+
+		public static void CleanupUnpackedDatabase(string databasePath) {
+			if (!IsDatabaseFile(databasePath))
+				return;
+			var dir = Path.GetDirectoryName(databasePath);
+			if (string.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir))
+				return;
+			var baseName = Path.GetFileNameWithoutExtension(databasePath);
+			if (string.IsNullOrWhiteSpace(baseName))
+				return;
+
+			try {
+				foreach (var file in Directory.EnumerateFiles(dir, baseName + ".id*", SearchOption.TopDirectoryOnly))
+					TryDeleteFile(file);
+				TryDeleteFile(Path.Combine(dir, baseName + ".nam"));
+				TryDeleteFile(Path.Combine(dir, baseName + ".til"));
+			}
+			catch {
+			}
+		}
+
+		static void TryDeleteFile(string path) {
+			try {
+				if (File.Exists(path))
+					File.Delete(path);
+			}
+			catch {
+			}
 		}
 
 		static bool Is64BitIda(string idaPath) {
@@ -176,13 +213,44 @@ namespace Kiln.Plugins.Ida.Pro {
 			return $"\"{escaped}\"";
 		}
 
-		static string QuoteForCommandLine(string value) {
-			if (string.IsNullOrEmpty(value))
+		static string QuoteForCommandLine(string arg) {
+			if (string.IsNullOrEmpty(arg))
 				return "\"\"";
-			var escaped = value.Replace("\"", "\\\"");
-			if (escaped.IndexOfAny(new[] { ' ', '\t' }) >= 0)
-				return $"\"{escaped}\"";
-			return escaped;
+			var needsQuotes = false;
+			for (var i = 0; i < arg.Length; i++) {
+				var ch = arg[i];
+				if (char.IsWhiteSpace(ch) || ch == '\"') {
+					needsQuotes = true;
+					break;
+				}
+			}
+			if (!needsQuotes)
+				return arg;
+
+			var builder = new System.Text.StringBuilder();
+			builder.Append('\"');
+			var backslashes = 0;
+			foreach (var ch in arg) {
+				if (ch == '\\') {
+					backslashes++;
+					continue;
+				}
+				if (ch == '\"') {
+					builder.Append('\\', backslashes * 2 + 1);
+					builder.Append(ch);
+					backslashes = 0;
+					continue;
+				}
+				if (backslashes > 0) {
+					builder.Append('\\', backslashes);
+					backslashes = 0;
+				}
+				builder.Append(ch);
+			}
+			if (backslashes > 0)
+				builder.Append('\\', backslashes * 2);
+			builder.Append('\"');
+			return builder.ToString();
 		}
 	}
 }

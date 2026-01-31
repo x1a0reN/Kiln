@@ -475,14 +475,20 @@ namespace Kiln.Mcp {
 
 				IdaAnalyzeResult result;
 				try {
+					var env = new Dictionary<string, string> {
+						["KILN_SYMBOL_SCRIPT"] = symbolScriptPath,
+						["KILN_SCRIPT_JSON"] = scriptJson,
+						["KILN_IL2CPP_HEADER"] = il2cppHeader,
+					};
 					result = await IdaHeadlessRunner.RunAsync(
 						idaPath,
 						locate.GameAssemblyPath,
 						idbDir,
 						autoLoadScript,
-						new[] { symbolScriptPath, scriptJson, il2cppHeader },
+						null,
 						context.Token,
-						context.Log).ConfigureAwait(false);
+						context.Log,
+						env).ConfigureAwait(false);
 				}
 				catch (OperationCanceledException) {
 					return;
@@ -1113,13 +1119,21 @@ namespace Kiln.Mcp {
 				args.Add(nameFilter);
 
 			try {
+				var env = new Dictionary<string, string> {
+					["KILN_EXPORT_OUTPUT"] = outputPath,
+				};
+				if (!string.IsNullOrWhiteSpace(nameFilter))
+					env["KILN_EXPORT_FILTER"] = nameFilter;
+				IdaHeadlessRunner.CleanupUnpackedDatabase(databasePath);
 				return IdaHeadlessRunner.RunAsync(
 					idaPath,
 					databasePath,
 					Path.GetDirectoryName(databasePath) ?? string.Empty,
 					scriptPath,
-					args,
-					CancellationToken.None).GetAwaiter().GetResult();
+					null,
+					CancellationToken.None,
+					null,
+					env).GetAwaiter().GetResult();
 			}
 			catch (Exception ex) {
 				return new IdaAnalyzeResult(false, -1, databasePath, databasePath, string.Empty, string.Empty, ex.Message);

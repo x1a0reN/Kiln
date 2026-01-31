@@ -52,12 +52,11 @@ def _disasm_func(ea, max_lines=400):
 	return "\n".join(lines), len(lines) >= max_lines
 
 def main():
-	if len(sys.argv) < 2:
+	out_path = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("KILN_EXPORT_OUTPUT")
+	name_filter = sys.argv[2] if len(sys.argv) > 2 else os.environ.get("KILN_EXPORT_FILTER")
+	if not out_path:
 		_usage()
 		return
-
-	out_path = sys.argv[1]
-	name_filter = sys.argv[2] if len(sys.argv) > 2 else None
 
 	has_hexrays = _init_hexrays()
 
@@ -102,7 +101,9 @@ def main():
 		"fallbackMode": fallback_mode,
 	}
 
-	os.makedirs(os.path.dirname(out_path), exist_ok=True)
+	out_dir = os.path.dirname(out_path)
+	if out_dir:
+		os.makedirs(out_dir, exist_ok=True)
 	with open(out_path, "w", encoding="utf-8") as f:
 		json.dump(result, f, ensure_ascii=False, indent=2)
 

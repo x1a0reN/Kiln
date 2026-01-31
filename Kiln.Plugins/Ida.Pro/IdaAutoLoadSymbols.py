@@ -10,13 +10,21 @@ def _usage():
 	print("Usage: IdaAutoLoadSymbols.py <ida_with_struct_py3.py> <script.json> <il2cpp.h>")
 
 def main():
-	if len(sys.argv) < 4:
+	symbol_script = None
+	script_json = None
+	il2cpp_header = None
+	if len(sys.argv) >= 4:
+		symbol_script = sys.argv[1]
+		script_json = sys.argv[2]
+		il2cpp_header = sys.argv[3]
+	else:
+		symbol_script = os.environ.get("KILN_SYMBOL_SCRIPT")
+		script_json = os.environ.get("KILN_SCRIPT_JSON")
+		il2cpp_header = os.environ.get("KILN_IL2CPP_HEADER")
+
+	if not symbol_script or not script_json or not il2cpp_header:
 		_usage()
 		return
-
-	symbol_script = sys.argv[1]
-	script_json = sys.argv[2]
-	il2cpp_header = sys.argv[3]
 
 	if not os.path.isfile(symbol_script):
 		print("Symbol script not found:", symbol_script)
