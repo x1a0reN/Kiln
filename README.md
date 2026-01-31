@@ -35,7 +35,7 @@ dotnet build Kiln.slnx -c Release
 This creates `publish\Kiln\` with:
 - `Plugins\` (all Kiln.Plugins.* DLLs)
 - `Tools\Il2CppDumper\`
-- `ida\`, `workspace\`
+- `ida\`, `workspace\`, `mods\`
 - `kiln.config.template.json` + `kiln.config.json` (copied if missing)
 
 ## Run (stdio MCP)
@@ -45,6 +45,9 @@ dotnet run --project Kiln.Mcp -c Release
 
 Optional logging:
 - Set `KILN_MCP_LOG` to a file path to capture MCP logs.
+
+## Config defaults
+- `modsRoot` defaults to `mods\` under the Kiln root. `patch_codegen` will auto-generate per-game plugin projects here.
 
 ## MCP tools
 - `kiln.help`
@@ -67,17 +70,19 @@ Optional logging:
 - `analysis.strings.search`
 - `analysis.pseudocode.search`
 - `analysis.pseudocode.get`
+- `analysis.pseudocode.ensure`
 - `patch_codegen`
 - `package_mod`
 
 ## analysis.* usage (offline artifacts)
 These tools operate on exported artifacts under `idaOutputDir` (default: `ida/`).
 
-1) Export from IDA (Phase 4):
+1) Export from IDA (Phase 4, async by default to avoid timeouts):
 ```json
-{ "name": "ida_export_symbols", "arguments": { "jobId": "<jobId>" } }
-{ "name": "ida_export_pseudocode", "arguments": { "jobId": "<jobId>" } }
+{ "name": "ida_export_symbols", "arguments": { "jobId": "<jobId>", "async": true } }
+{ "name": "ida_export_pseudocode", "arguments": { "jobId": "<jobId>", "async": true } }
 ```
+Then poll `workflow.status` / `workflow.logs` for the export jobId.
 
 2) Build indexes (optional but faster, cached across jobs):
 ```json
@@ -99,6 +104,7 @@ These tools operate on exported artifacts under `idaOutputDir` (default: `ida/`)
 { "name": "analysis.symbols.xrefs", "arguments": { "jobId": "<jobId>", "name": "Player_Update", "direction": "both", "limit": 50 } }
 { "name": "analysis.pseudocode.get", "arguments": { "jobId": "<jobId>", "name": "Player_Update", "maxChars": 4000 } }
 ```
+If pseudocode is missing, `analysis.pseudocode.get` will start a background export and return `pending` + `exportJobId`.
 
 Tip: if `idaOutputDir` already contains a matching `.i64/.idb`, `ida_analyze` can skip analysis by passing `reuseExisting: true`.
 
@@ -107,6 +113,8 @@ If you have a pre-existing `.i64/.idb` from manual IDA work, register it first:
 { "name": "ida_register_db", "arguments": { "gameDir": "<gameDir>", "databasePath": "D:\\Path\\GameAssembly.i64", "copyToIdbDir": true, "overwrite": false } }
 ```
 Note: this validates `script.json` + `il2cpp.h` from the configured `il2cppRootDir` dump folder and writes a `.kiln.json` meta file next to the DB.
+
+`patch_codegen` will also emit a per-game plugin project under `modsRoot` when `gameDir` or `jobId` is provided (disable with `emitPluginProject: false`).
 
 ## MCP resources
 - List: `resources/list`

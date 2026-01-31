@@ -8,6 +8,7 @@ namespace Kiln.Core {
 		public string Il2CppRootDir { get; set; } = string.Empty;
 		public string IdaOutputDir { get; set; } = string.Empty;
 		public string WorkspaceRoot { get; set; } = string.Empty;
+		public string ModsRoot { get; set; } = string.Empty;
 
 		public static KilnConfig Load(string? baseDirectory = null) {
 			var root = ResolveRoot(baseDirectory);
@@ -16,6 +17,7 @@ namespace Kiln.Core {
 				Il2CppRootDir = Path.Combine(root, "Tools", "Il2CppDumper"),
 				WorkspaceRoot = Path.Combine(root, "workspace"),
 				IdaOutputDir = Path.Combine(root, "ida"),
+				ModsRoot = Path.Combine(root, "mods"),
 			};
 
 			var configPath = Path.Combine(root, "kiln.config.json");
@@ -35,6 +37,7 @@ namespace Kiln.Core {
 				loaded.Il2CppRootDir = NormalizePathWithDefault(root, ResolveIl2CppRootDir(root, loaded), defaults.Il2CppRootDir);
 				loaded.IdaOutputDir = NormalizePathWithDefault(root, loaded.IdaOutputDir, defaults.IdaOutputDir);
 				loaded.WorkspaceRoot = NormalizePathWithDefault(root, loaded.WorkspaceRoot, defaults.WorkspaceRoot);
+				loaded.ModsRoot = NormalizePathWithDefault(root, loaded.ModsRoot, defaults.ModsRoot);
 				return loaded;
 			}
 			catch {
@@ -109,6 +112,11 @@ namespace Kiln.Core {
 		public string GetIdaOutputDirForGame(string gameDir) {
 			var name = GetSafeGameName(gameDir);
 			return Path.Combine(IdaOutputDir, name);
+		}
+
+		public string GetModsRootForGame(string gameDir) {
+			var name = GetSafeGameName(gameDir);
+			return Path.Combine(ModsRoot, name);
 		}
 
 		static string GetSafeGameName(string gameDir) {

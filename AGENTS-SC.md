@@ -77,6 +77,7 @@
 - 2026-01-31：patch_codegen 支持 jobId/gameDir/analysisDir 解析相对产物并自动回退分析目录。
 - 2026-01-31：patch_codegen 过滤泛词、加入伪代码命中评分，并生成 HarmonyX 无敌 Hook。
 - 2026-01-31：基于 Karate.Survivor 完成端到端闭环验证（复用 i64、导出符号、按需伪代码、生成 patch 模板）。
+- 2026-01-31：新增 modsRoot 配置与 patch_codegen 自动生成按游戏划分的插件工程，并将 IDA 导出/伪代码自动导出改为后台任务避免超时。
 
 ## 关键理念
 - 关系数据以 symbols/strings 为主；伪代码按需导出并缓存，exportAll 可选且默认关闭。
