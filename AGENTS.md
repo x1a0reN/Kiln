@@ -87,6 +87,7 @@
 - 2026-01-31: Auto-start now cleans unpacked DB files and supports headless idat launch.
 - 2026-01-31: Added configurable auto-start wait time for ida-pro-mcp readiness.
 - 2026-01-31: Enforced headless idat launch for ida-pro-mcp auto-start and fail fast when only GUI IDA is available.
+- 2026-01-31: Headless ida-pro-mcp auto-start now uses -A to suppress dialogs/prompts.
 
 ## Key Principles
 - Full relationships come from symbols/strings; pseudocode is on-demand with cache, exportAll is optional (default off).

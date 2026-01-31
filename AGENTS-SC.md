@@ -127,3 +127,4 @@ dotnet run --project Kiln.Mcp -c Release
 - 所有改动在功能分支完成；PR 由用户发起并由用户最终合并。
 
 - 2026-01-31：ida-pro-mcp 自动启动强制使用 idat（headless），仅有 GUI IDA 时直接报错并拒绝启动。
+- 2026-01-31：headless ida-pro-mcp 自动启动增加 -A，避免弹窗阻塞。

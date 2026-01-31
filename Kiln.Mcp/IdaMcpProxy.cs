@@ -214,6 +214,8 @@ namespace Kiln.Mcp {
 			var args = new List<string> {
 				"-S" + BuildScriptInvocation(scriptPath),
 			};
+			if (config.IdaMcpHeadless)
+				args.Insert(0, "-A");
 			var logPath = Path.Combine(
 				string.IsNullOrWhiteSpace(config.WorkspaceRoot) ? AppContext.BaseDirectory : config.WorkspaceRoot,
 				"ida_mcp_ida.log");
