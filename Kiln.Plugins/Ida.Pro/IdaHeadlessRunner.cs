@@ -115,9 +115,22 @@ namespace Kiln.Plugins.Ida.Pro {
 		}
 
 		public static string GetDatabasePath(string idaPath, string inputBinaryPath, string outputDir) {
-			var is64 = string.Equals(Path.GetFileName(idaPath), "idat64.exe", StringComparison.OrdinalIgnoreCase);
+			var is64 = Is64BitIda(idaPath);
 			var dbExt = is64 ? ".i64" : ".idb";
 			return Path.Combine(outputDir, Path.GetFileNameWithoutExtension(inputBinaryPath) + dbExt);
+		}
+
+		static bool Is64BitIda(string idaPath) {
+			var name = Path.GetFileName(idaPath);
+			if (string.IsNullOrWhiteSpace(name))
+				return false;
+			if (name.Contains("64", StringComparison.OrdinalIgnoreCase))
+				return true;
+			if (string.Equals(name, "idat.exe", StringComparison.OrdinalIgnoreCase))
+				return true;
+			if (string.Equals(name, "ida.exe", StringComparison.OrdinalIgnoreCase))
+				return true;
+			return false;
 		}
 
 		static string BuildScriptInvocation(string scriptPath, IReadOnlyList<string>? scriptArgs) {
