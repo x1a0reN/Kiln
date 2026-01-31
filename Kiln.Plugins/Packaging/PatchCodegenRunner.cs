@@ -66,9 +66,13 @@ namespace Kiln.Plugins.Packaging {
 			var strings = string.IsNullOrWhiteSpace(resolved.StringsPath)
 				? new List<StringInfo>()
 				: LoadStrings(resolved.StringsPath);
+			var pseudocode = string.IsNullOrWhiteSpace(resolved.PseudocodePath)
+				? new List<PseudocodeInfo>()
+				: LoadPseudocode(resolved.PseudocodePath);
 
 			var stringHits = BuildStringHits(strings, keywords);
-			var targets = BuildTargets(symbols, stringHits, keywords);
+			var pseudocodeHits = BuildPseudocodeHits(pseudocode, keywords);
+			var targets = BuildTargets(symbols, stringHits, pseudocodeHits, keywords);
 
 			var counts = new AnalysisCounts {
 				Symbols = string.IsNullOrWhiteSpace(resolved.SymbolsPath) ? null : symbols.Count,
@@ -154,9 +158,15 @@ namespace Kiln.Plugins.Packaging {
 				FlushToken(buffer, list);
 			}
 			FlushToken(buffer, list);
+			var stopwords = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
+				"mod", "mods", "hook", "hooks", "plugin", "plugins", "template", "templates",
+				"patch", "patches", "kiln", "generate", "generated", "make", "create",
+				"example", "samples", "demo", "test",
+			};
+			var allow = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "hp" };
 			return list
 				.Select(x => x.ToLowerInvariant())
-				.Where(x => x.Length >= 3)
+				.Where(x => (x.Length >= 3 || allow.Contains(x)) && !stopwords.Contains(x))
 				.Distinct(StringComparer.OrdinalIgnoreCase)
 				.Take(24)
 				.ToList();
@@ -198,7 +208,11 @@ namespace Kiln.Plugins.Packaging {
 			return hits;
 		}
 
-		static List<PatchTarget> BuildTargets(List<SymbolInfo> symbols, Dictionary<string, List<string>> stringHits, List<string> keywords) {
+		static List<PatchTarget> BuildTargets(
+			List<SymbolInfo> symbols,
+			Dictionary<string, List<string>> stringHits,
+			Dictionary<string, List<string>> pseudocodeHits,
+			List<string> keywords) {
 			var results = new List<PatchTarget>();
 			foreach (var symbol in symbols) {
 				var score = 0;
@@ -234,6 +248,17 @@ namespace Kiln.Plugins.Packaging {
 					if (strings.Count > 0) {
 						score += strings.Count;
 						reasons.Add("string");
+					}
+				}
+
+				if (pseudocodeHits.TryGetValue(NormalizeEa(symbol.Ea), out var matchedPseudo)) {
+					var used = 0;
+					foreach (var keyword in matchedPseudo.Distinct(StringComparer.OrdinalIgnoreCase)) {
+						reasons.Add($"pseudocode:{keyword}");
+						score += 2;
+						used++;
+						if (used >= MaxReasons)
+							break;
 					}
 				}
 
@@ -322,6 +347,60 @@ namespace Kiln.Plugins.Packaging {
 			}
 
 			return list;
+		}
+
+		static List<PseudocodeInfo> LoadPseudocode(string path) {
+			var list = new List<PseudocodeInfo>();
+			using var stream = File.OpenRead(path);
+			using var doc = JsonDocument.Parse(stream);
+			if (!doc.RootElement.TryGetProperty("functions", out var funcs) || funcs.ValueKind != JsonValueKind.Array)
+				return list;
+
+			foreach (var item in funcs.EnumerateArray()) {
+				var name = item.TryGetProperty("name", out var nameProp) ? nameProp.GetString() ?? string.Empty : string.Empty;
+				var ea = item.TryGetProperty("ea", out var eaProp) ? eaProp.GetString() ?? string.Empty : string.Empty;
+				var code = item.TryGetProperty("pseudocode", out var codeProp) ? codeProp.GetString() ?? string.Empty : string.Empty;
+				if (string.IsNullOrWhiteSpace(name) && string.IsNullOrWhiteSpace(ea))
+					continue;
+				list.Add(new PseudocodeInfo {
+					Name = name,
+					Ea = ea,
+					Pseudocode = code,
+					PseudocodeLower = string.IsNullOrWhiteSpace(code) ? string.Empty : code.ToLowerInvariant(),
+				});
+			}
+
+			return list;
+		}
+
+		static Dictionary<string, List<string>> BuildPseudocodeHits(List<PseudocodeInfo> pseudocode, List<string> keywords) {
+			var hits = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+			if (keywords.Count == 0)
+				return hits;
+
+			foreach (var entry in pseudocode) {
+				if (string.IsNullOrWhiteSpace(entry.Pseudocode))
+					continue;
+				if (!ContainsAny(entry.PseudocodeLower ?? entry.Pseudocode.ToLowerInvariant(), keywords))
+					continue;
+
+				var key = NormalizeEa(entry.Ea);
+				if (string.IsNullOrWhiteSpace(key))
+					continue;
+				if (!hits.TryGetValue(key, out var list)) {
+					list = new List<string>();
+					hits[key] = list;
+				}
+				foreach (var keyword in keywords) {
+					if (entry.PseudocodeLower?.Contains(keyword, StringComparison.OrdinalIgnoreCase) == true) {
+						list.Add(keyword);
+						if (list.Count >= MaxReasons)
+							break;
+					}
+				}
+			}
+
+			return hits;
 		}
 
 		static int? ReadCount(string? path, string arrayName) {
@@ -559,7 +638,10 @@ namespace Kiln.Plugins.Packaging {
 		}
 
 		const string PluginTemplate =
-@"using BepInEx;
+@"using System;
+using System.Linq;
+using System.Reflection;
+using BepInEx;
 using BepInEx.Unity.IL2CPP;
 using BepInEx.Logging;
 using HarmonyLib;
@@ -568,26 +650,102 @@ namespace Kiln.Patches {
 	[BepInPlugin(""com.kiln.patch"", ""KilnPatch"", ""0.1.0"")]
 	public sealed class Plugin : BasePlugin {
 		public static ManualLogSource LoggerInstance = null!;
+		static readonly string[] DamageKeywords = { ""damage"", ""hurt"", ""health"", ""hp"" };
 		Harmony? _harmony;
 
 		public override void Load() {
 			LoggerInstance = Log;
-			_harmony = new Harmony(""com.kiln.patch"");
+			_harmony = new Harmony(""com.kiln.patch""); // HarmonyX (BepInEx IL2CPP)
 			Log.LogInfo($""Kiln patch loaded. Targets: {PatchTargets.Targets.Length}."");
 
-			// TODO: pick a target from PatchTargets.Targets and attach hooks.
-			// Harmony example (managed method):
-			// var method = AccessTools.Method(""Namespace.Type:Method"");
-			// _harmony.Patch(method, prefix: new HarmonyMethod(typeof(Patches), nameof(Patches.Prefix)));
+			var candidates = PatchTargets.Targets
+				.Where(t => MatchKeywords(t, DamageKeywords))
+				.OrderByDescending(t => t.Score)
+				.Take(8)
+				.ToArray();
 
-			// Native detour example (addresses from PatchTargets):
-			// Use an IL2CPP/native detour library and PatchTargets.Targets[i].Ea.
+			if (candidates.Length == 0) {
+				Log.LogWarning(""No damage-related targets found; review patch_targets.json."");
+				return;
+			}
+
+			foreach (var target in candidates) {
+				var method = ResolveMethod(target.Name);
+				if (method is null) {
+					Log.LogWarning($""Resolve failed: {target.Name} ({target.Ea})"");
+					continue;
+				}
+
+				_harmony.Patch(method, prefix: new HarmonyMethod(typeof(Patches), nameof(Patches.BlockDamagePrefix)));
+				Log.LogInfo($""Patched: {target.Name} ({target.Ea})"");
+			}
+		}
+
+		static bool MatchKeywords(PatchTarget target, string[] keywords) {
+			foreach (var keyword in keywords) {
+				if (Contains(target.Name, keyword) || Contains(target.Signature, keyword))
+					return true;
+				foreach (var reason in target.Reasons) {
+					if (Contains(reason, keyword))
+						return true;
+				}
+				foreach (var str in target.Strings) {
+					if (Contains(str, keyword))
+						return true;
+				}
+			}
+			return false;
+		}
+
+		static bool Contains(string? value, string keyword) =>
+			!string.IsNullOrWhiteSpace(value) && value.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0;
+
+		static MethodBase? ResolveMethod(string name) {
+			if (string.IsNullOrWhiteSpace(name))
+				return null;
+
+			var parts = name.Split(new[] { ""$$"" }, 2, StringSplitOptions.None);
+			if (parts.Length == 2) {
+				var typeName = parts[0];
+				var methodName = parts[1];
+				var type = FindType(typeName);
+				if (type is not null)
+					return AccessTools.Method(type, methodName);
+			}
+
+			// Fallback: try Harmony's string-based resolver.
+			return AccessTools.Method(name);
+		}
+
+		static Type? FindType(string typeName) {
+			foreach (var asm in AppDomain.CurrentDomain.GetAssemblies()) {
+				Type? type = null;
+				try {
+					type = asm.GetTypes().FirstOrDefault(t =>
+						string.Equals(t.Name, typeName, StringComparison.Ordinal) ||
+						(t.FullName?.EndsWith(""."" + typeName, StringComparison.Ordinal) ?? false));
+				}
+				catch (ReflectionTypeLoadException ex) {
+					type = ex.Types?.FirstOrDefault(t =>
+						t is not null && (
+							string.Equals(t.Name, typeName, StringComparison.Ordinal) ||
+							(t.FullName?.EndsWith(""."" + typeName, StringComparison.Ordinal) ?? false)));
+				}
+				catch {
+				}
+
+				if (type is not null)
+					return type;
+			}
+
+			return null;
 		}
 	}
 
 	static class Patches {
-		public static void Prefix() {
-			Plugin.LoggerInstance.LogInfo(""Prefix hit."");
+		public static bool BlockDamagePrefix() {
+			Plugin.LoggerInstance.LogInfo(""BlockDamagePrefix hit."");
+			return false; // skip original (invincible)
 		}
 	}
 }";
@@ -645,6 +803,13 @@ namespace Kiln.Patches {
 			public string FuncEa { get; set; } = string.Empty;
 			public string? FuncName { get; set; }
 			public string? RefEa { get; set; }
+		}
+
+		sealed class PseudocodeInfo {
+			public string Name { get; set; } = string.Empty;
+			public string Ea { get; set; } = string.Empty;
+			public string Pseudocode { get; set; } = string.Empty;
+			public string? PseudocodeLower { get; set; }
 		}
 
 		sealed class PatchTarget {

@@ -75,6 +75,16 @@
 - 2026-01-31: IDA export fix — clean stale unpacked DB files before headless export to avoid lock prompts.
 - 2026-01-31: Analysis pseudocode on-demand export + auto-export search/get + optional background full export.
 - 2026-01-31: patch_codegen resolves relative artifacts via jobId/gameDir/analysisDir and auto-falls back to analysis outputs.
+- 2026-01-31: patch_codegen now filters generic keywords, scores pseudocode hits, and emits HarmonyX invincibility hooks.
+- 2026-01-31: End-to-end IL2CPP flow validated with Karate.Survivor (reuse i64, symbols export, on-demand pseudocode, patch template).
+
+## Key Principles
+- Full relationships come from symbols/strings; pseudocode is on-demand with cache, exportAll is optional (default off).
+- Resolve analysis artifacts relative to analysis dir via jobId/gameDir/analysisDir; avoid brittle absolute paths.
+- HarmonyX is the default patch strategy for managed IL2CPP methods; native detours are fallback.
+- Target selection is heuristic; review and narrow before shipping (avoid lifecycle hooks unless intended).
+- kiln.exampleFlow must be read before tool usage (server enforces).
+
 ## Next Steps
 - Implement Phase 3: IDA headless analysis + symbol/typing load.
 - Implement Phase 4: symbol and pseudocode export.
