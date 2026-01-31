@@ -1854,7 +1854,7 @@ Common errors:
 - Missing ida_with_struct_py3.py in il2cppRootDir.
 Recommended order:
 - After il2cpp_dump (or manual dump), before exports.
-Args: { ""gameDir"": ""C:\\Games\\Example"", ""idaPath"": ""C:\\Program Files\\IDA Professional 9.2\\idat64.exe"", ""reuseExisting"": true }
+Args: { ""gameDir"": ""C:\\Games\\Example"", ""idaPath"": ""C:\\Program Files\\IDA Professional 9.2\\idat.exe"", ""reuseExisting"": true }
 
 9) ida_register_db
 Purpose: Import a pre-existing .i64/.idb into Kiln (no re-analysis).
