@@ -56,6 +56,7 @@
 - 2026-01-30：Phase 3/4 增强——ida_register_db 支持导入外部 .i64/.idb 并写入 Kiln 元数据用于复用。
 - 2026-01-30：发布结构——MCP 可从 publish/Plugins 目录加载插件 DLL，方便整理发布目录。
 - 2026-01-30：Phase 5 修复——patch_codegen 生成 C# 字符串时转义控制字符，避免模板无法编译。
+- 2026-01-30：仓库整理——.gitignore 忽略 publish/ 发布产物目录。
 ## 下一步
 - 实现 Phase 3：IDA headless 分析 + 符号/类型加载。
 - 实现 Phase 4：符号与伪代码导出。

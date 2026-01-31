@@ -5,4 +5,5 @@
 Kiln.Mcp/log/
 kiln.config.json
 workspace/
+/publish/
 .vs/
