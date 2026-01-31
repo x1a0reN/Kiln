@@ -316,6 +316,9 @@ namespace Kiln.Mcp {
 					new JObject {
 						["type"] = "object",
 						["properties"] = new JObject {
+							["jobId"] = new JObject { ["type"] = "string", ["description"] = "Optional; resolve artifacts from the job's analysis directory." },
+							["gameDir"] = new JObject { ["type"] = "string", ["description"] = "Optional; resolve artifacts from idaOutputDir/<game-name>." },
+							["analysisDir"] = new JObject { ["type"] = "string", ["description"] = "Optional; resolve artifacts relative to this analysis directory." },
 							["requirements"] = new JObject { ["type"] = "string" },
 							["analysisArtifacts"] = new JObject {
 								["type"] = "array",

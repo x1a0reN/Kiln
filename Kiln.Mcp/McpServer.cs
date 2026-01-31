@@ -1113,6 +1113,18 @@ namespace Kiln.Mcp {
 			if (string.IsNullOrWhiteSpace(requirements))
 				return ToolError(id, "Missing requirements");
 
+			var jobId = input["jobId"]?.Value<string>();
+			var gameDir = input["gameDir"]?.Value<string>();
+			var analysisDir = input["analysisDir"]?.Value<string>();
+			if (string.IsNullOrWhiteSpace(analysisDir)) {
+				if (!string.IsNullOrWhiteSpace(jobId))
+					analysisDir = ResolveAnalysisDir(jobId, input);
+				else if (!string.IsNullOrWhiteSpace(gameDir))
+					analysisDir = config.GetIdaOutputDirForGame(gameDir);
+				else if (!string.IsNullOrWhiteSpace(config.IdaOutputDir))
+					analysisDir = config.IdaOutputDir;
+			}
+
 			var artifactsToken = input["analysisArtifacts"] as JArray;
 			var artifacts = new List<string>();
 			if (artifactsToken is not null) {
@@ -1123,10 +1135,12 @@ namespace Kiln.Mcp {
 				}
 			}
 
+			var resolvedArtifacts = ResolveAnalysisArtifacts(analysisDir, artifacts);
+
 			var outputDir = Path.Combine(config.WorkspaceRoot, "patches", DateTime.UtcNow.ToString("yyyyMMdd_HHmmss"));
 			PatchCodegenResult result;
 			try {
-				result = PatchCodegenRunner.Run(requirements, artifacts, outputDir);
+				result = PatchCodegenRunner.Run(requirements, resolvedArtifacts, outputDir);
 			}
 			catch (Exception ex) {
 				return ToolError(id, $"patch_codegen failed: {ex.Message}");
@@ -1173,6 +1187,75 @@ namespace Kiln.Mcp {
 					list.Add(value);
 			}
 			return list;
+		}
+
+		List<string> ResolveAnalysisArtifacts(string? analysisDir, List<string> artifacts) {
+			var resolved = new List<string>();
+			var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+			void AddIfExists(string path) {
+				if (string.IsNullOrWhiteSpace(path))
+					return;
+				if (!File.Exists(path))
+					return;
+				var full = Path.GetFullPath(path);
+				if (seen.Add(full))
+					resolved.Add(full);
+			}
+
+			string? ResolveRelative(string item) {
+				if (string.IsNullOrWhiteSpace(item) || string.IsNullOrWhiteSpace(analysisDir))
+					return null;
+				return Path.Combine(analysisDir, item);
+			}
+
+			foreach (var item in artifacts) {
+				if (string.IsNullOrWhiteSpace(item))
+					continue;
+				if (Path.IsPathRooted(item)) {
+					AddIfExists(item);
+					continue;
+				}
+
+				var candidate = ResolveRelative(item);
+				if (!string.IsNullOrWhiteSpace(candidate) && File.Exists(candidate)) {
+					AddIfExists(candidate);
+					continue;
+				}
+
+				if (!string.IsNullOrWhiteSpace(analysisDir)) {
+					var fallback = ResolveArtifactFallback(analysisDir, item);
+					AddIfExists(fallback);
+				}
+			}
+
+			if (resolved.Count == 0 && !string.IsNullOrWhiteSpace(analysisDir)) {
+				AddIfExists(Path.Combine(analysisDir, "symbols.index.json"));
+				AddIfExists(Path.Combine(analysisDir, "symbols.json"));
+				AddIfExists(Path.Combine(analysisDir, "strings.index.json"));
+				AddIfExists(Path.Combine(analysisDir, "strings.json"));
+				AddIfExists(Path.Combine(analysisDir, "pseudocode.index.json"));
+				AddIfExists(Path.Combine(analysisDir, "pseudocode.json"));
+			}
+
+			return resolved;
+		}
+
+		string ResolveArtifactFallback(string analysisDir, string item) {
+			var normalized = item.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
+			if (normalized.EndsWith("symbols.index.json", StringComparison.OrdinalIgnoreCase))
+				return Path.Combine(analysisDir, "symbols.json");
+			if (normalized.EndsWith("symbols.json", StringComparison.OrdinalIgnoreCase))
+				return Path.Combine(analysisDir, "symbols.index.json");
+			if (normalized.EndsWith("strings.index.json", StringComparison.OrdinalIgnoreCase))
+				return Path.Combine(analysisDir, "strings.json");
+			if (normalized.EndsWith("strings.json", StringComparison.OrdinalIgnoreCase))
+				return Path.Combine(analysisDir, "strings.index.json");
+			if (normalized.EndsWith("pseudocode.index.json", StringComparison.OrdinalIgnoreCase))
+				return Path.Combine(analysisDir, "pseudocode.json");
+			if (normalized.EndsWith("pseudocode.json", StringComparison.OrdinalIgnoreCase))
+				return Path.Combine(analysisDir, "pseudocode.index.json");
+			return Path.Combine(analysisDir, item);
 		}
 
 		void SearchPseudocode(
@@ -2462,11 +2545,12 @@ Args: { ""jobId"": ""..."", ""names"": [""Player_Update""], ""exportAll"": false
 Purpose: Generate patch template + target shortlist from analysis artifacts.
 Best practices:
 - Pass symbols/pseudocode/strings indexes for best results.
+- You can pass jobId/gameDir/analysisDir and list filenames only; Kiln will resolve them.
 Common errors:
 - Empty artifacts => empty target list.
 Recommended order:
 - After analysis search identifies targets.
-Args: { ""requirements"": ""..."", ""analysisArtifacts"": [""...""] }
+Args: { ""jobId"": ""..."", ""requirements"": ""..."", ""analysisArtifacts"": [""symbols.json"", ""strings.json"", ""pseudocode.json""] }
 
 21) package_mod
 Purpose: Package output directory into zip with manifest/install/rollback.
