@@ -63,6 +63,7 @@
 - 2026-01-30: Release fix — resolve IDA export scripts from publish root or Plugins folder.
 - 2026-01-30: IDA export fix — skip -o when opening existing .i64/.idb to avoid export failures.
 - 2026-01-30: IDA CLI fix — pass -S script args in a single quoted string so IDA receives parameters.
+- 2026-01-30: IDA CLI fix — pass script args as separate arguments after -S<script> to ensure ARGV is populated.
 
 ## Next Steps
 - Implement Phase 3: IDA headless analysis + symbol/typing load.

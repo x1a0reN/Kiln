@@ -35,8 +35,13 @@ namespace Kiln.Plugins.Ida.Pro {
 			if (!isDatabase)
 				args.Add($"-o\"{dbPath}\"");
 
-			if (!string.IsNullOrWhiteSpace(scriptPath))
-				args.Add($"-S{BuildScriptInvocation(scriptPath, scriptArgs)}");
+			if (!string.IsNullOrWhiteSpace(scriptPath)) {
+				args.Add($"-S{scriptPath}");
+				if (scriptArgs is not null) {
+					foreach (var arg in scriptArgs)
+						args.Add(arg);
+				}
+			}
 
 			args.Add($"\"{inputBinaryPath}\"");
 
@@ -163,21 +168,6 @@ namespace Kiln.Plugins.Ida.Pro {
 			return fileName;
 		}
 
-		static string BuildScriptInvocation(string scriptPath, IReadOnlyList<string>? scriptArgs) {
-			var parts = new List<string> { EscapeForIdaArg(scriptPath) };
-			if (scriptArgs is not null) {
-				foreach (var arg in scriptArgs)
-					parts.Add(EscapeForIdaArg(arg));
-			}
-			var inner = string.Join(" ", parts);
-			return $"\"{inner}\"";
-		}
-
-		static string EscapeForIdaArg(string value) {
-			var escaped = value.Replace("\"", "\\\"");
-			if (escaped.IndexOfAny(new[] { ' ', '\t' }) >= 0)
-				return $"\\\"{escaped}\\\"";
-			return escaped;
-		}
+		// Script args are passed as separate CLI args to IDA (after -S<script>).
 	}
 }
