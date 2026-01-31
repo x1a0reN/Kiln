@@ -1,7 +1,10 @@
 using System;
 using System.IO;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Kiln.Core;
@@ -181,6 +184,8 @@ namespace Kiln.Mcp {
 				return HandleIl2CppDump(id, input);
 			if (tool.Method == "ida_analyze")
 				return HandleIdaAnalyze(id, input);
+			if (tool.Method == "ida_register_db")
+				return HandleIdaRegisterDb(id, input);
 			if (tool.Method == "ida_export_symbols")
 				return HandleIdaExportSymbols(id, input);
 			if (tool.Method == "ida_export_pseudocode")
@@ -191,6 +196,10 @@ namespace Kiln.Mcp {
 				return HandleAnalysisSymbolsSearch(id, input);
 			if (tool.Method == "analysis.symbols.get")
 				return HandleAnalysisSymbolsGet(id, input);
+			if (tool.Method == "analysis.symbols.xrefs")
+				return HandleAnalysisSymbolsXrefs(id, input);
+			if (tool.Method == "analysis.strings.search")
+				return HandleAnalysisStringsSearch(id, input);
 			if (tool.Method == "analysis.pseudocode.search")
 				return HandleAnalysisPseudocodeSearch(id, input);
 			if (tool.Method == "analysis.pseudocode.get")
@@ -493,6 +502,70 @@ namespace Kiln.Mcp {
 			return ToolOk(id, payload);
 		}
 
+		JObject HandleIdaRegisterDb(JToken? id, JObject input) {
+			var gameDir = input["gameDir"]?.Value<string>();
+			var databasePath = input["databasePath"]?.Value<string>();
+			if (string.IsNullOrWhiteSpace(gameDir))
+				return ToolError(id, "Missing gameDir");
+			if (string.IsNullOrWhiteSpace(databasePath))
+				return ToolError(id, "Missing databasePath");
+
+			if (!File.Exists(databasePath))
+				return ToolError(id, $"databasePath not found: {databasePath}");
+
+			var ext = Path.GetExtension(databasePath);
+			if (!ext.Equals(".i64", StringComparison.OrdinalIgnoreCase) && !ext.Equals(".idb", StringComparison.OrdinalIgnoreCase))
+				return ToolError(id, "databasePath must be a .i64 or .idb file.");
+
+			var locate = UnityLocator.Locate(gameDir);
+			if (!locate.IsIl2Cpp || string.IsNullOrWhiteSpace(locate.GameAssemblyPath))
+				return ToolError(id, "Unity IL2CPP GameAssembly.dll not found.");
+
+			var dumpDir = config.GetIl2CppDumpDir(gameDir);
+			var scriptJson = Path.Combine(dumpDir, "script.json");
+			var il2cppHeader = Path.Combine(dumpDir, "il2cpp.h");
+			if (!File.Exists(scriptJson))
+				return ToolError(id, $"script.json not found in il2cpp dump dir: {scriptJson}");
+			if (!File.Exists(il2cppHeader))
+				return ToolError(id, $"il2cpp.h not found in il2cpp dump dir: {il2cppHeader}");
+
+			var idbDir = input["idbDir"]?.Value<string>();
+			if (string.IsNullOrWhiteSpace(idbDir))
+				idbDir = config.GetIdaOutputDirForGame(gameDir);
+			Directory.CreateDirectory(idbDir);
+
+			var copyToIdbDir = input["copyToIdbDir"]?.Value<bool?>() ?? true;
+			var overwrite = input["overwrite"]?.Value<bool?>() ?? false;
+
+			var expectedDb = GetExpectedDatabasePathForImport(idbDir, locate.GameAssemblyPath, databasePath);
+			var targetDb = databasePath;
+			var copied = false;
+
+			if (copyToIdbDir && !PathsEqual(databasePath, expectedDb)) {
+				if (File.Exists(expectedDb) && !overwrite)
+					return ToolError(id, $"Target DB already exists: {expectedDb} (set overwrite=true to replace).");
+				File.Copy(databasePath, expectedDb, overwrite);
+				targetDb = expectedDb;
+				copied = true;
+			}
+
+			TryWriteDbMeta(targetDb, locate, scriptJson, il2cppHeader);
+			var payload = new JObject {
+				["databasePath"] = targetDb,
+				["copied"] = copied,
+				["metaPath"] = GetDbMetaPath(targetDb),
+			};
+			return ToolOk(id, payload);
+		}
+
+		string GetExpectedDatabasePathForImport(string idbDir, string gameAssemblyPath, string sourceDatabasePath) {
+			var ext = Path.GetExtension(sourceDatabasePath);
+			var name = Path.GetFileNameWithoutExtension(gameAssemblyPath);
+			if (string.IsNullOrWhiteSpace(ext))
+				ext = ".i64";
+			return Path.Combine(idbDir, name + ext);
+		}
+
 		JObject HandleIdaExportSymbols(JToken? id, JObject input) {
 			var jobId = input["jobId"]?.Value<string>();
 			if (string.IsNullOrWhiteSpace(jobId))
@@ -584,13 +657,18 @@ namespace Kiln.Mcp {
 
 			var symbolsPath = Path.Combine(analysisDir, "symbols.json");
 			var pseudocodePath = Path.Combine(analysisDir, "pseudocode.json");
+			var stringsPath = Path.Combine(analysisDir, "strings.json");
 			var result = new JObject();
 
 			if (File.Exists(symbolsPath)) {
 				var symbols = LoadSymbols(symbolsPath);
-				var indexPath = Path.Combine(analysisDir, "symbols.index.json");
-				SaveSymbolsIndex(indexPath, symbols);
-				result["symbolsIndex"] = indexPath;
+				var localIndex = Path.Combine(analysisDir, "symbols.index.json");
+				SaveSymbolsIndex(localIndex, symbols);
+				var cacheIndex = GetIndexCachePath(symbolsPath, "symbols.index.json");
+				if (!PathsEqual(localIndex, cacheIndex))
+					SaveSymbolsIndex(cacheIndex, symbols);
+				result["symbolsIndex"] = cacheIndex;
+				result["symbolsLocalIndex"] = localIndex;
 				result["symbolsCount"] = symbols.Count;
 			}
 			else {
@@ -599,13 +677,32 @@ namespace Kiln.Mcp {
 
 			if (File.Exists(pseudocodePath)) {
 				var functions = LoadPseudocode(pseudocodePath);
-				var indexPath = Path.Combine(analysisDir, "pseudocode.index.json");
-				SavePseudocodeIndex(indexPath, functions);
-				result["pseudocodeIndex"] = indexPath;
+				var localIndex = Path.Combine(analysisDir, "pseudocode.index.json");
+				SavePseudocodeIndex(localIndex, functions);
+				var cacheIndex = GetIndexCachePath(pseudocodePath, "pseudocode.index.json");
+				if (!PathsEqual(localIndex, cacheIndex))
+					SavePseudocodeIndex(cacheIndex, functions);
+				result["pseudocodeIndex"] = cacheIndex;
+				result["pseudocodeLocalIndex"] = localIndex;
 				result["pseudocodeCount"] = functions.Count;
 			}
 			else {
 				result["pseudocodeIndex"] = null;
+			}
+
+			if (File.Exists(stringsPath)) {
+				var strings = LoadStrings(stringsPath);
+				var localIndex = Path.Combine(analysisDir, "strings.index.json");
+				SaveStringsIndex(localIndex, strings);
+				var cacheIndex = GetIndexCachePath(stringsPath, "strings.index.json");
+				if (!PathsEqual(localIndex, cacheIndex))
+					SaveStringsIndex(cacheIndex, strings);
+				result["stringsIndex"] = cacheIndex;
+				result["stringsLocalIndex"] = localIndex;
+				result["stringsCount"] = strings.Count;
+			}
+			else {
+				result["stringsIndex"] = null;
 			}
 
 			return ToolOk(id, result);
@@ -624,21 +721,26 @@ namespace Kiln.Mcp {
 				return ToolError(id, "Missing analysis directory (set idaOutputDir or run ida_analyze first).");
 
 			var list = LoadSymbolsPreferIndex(analysisDir);
+			var field = input["field"]?.Value<string>() ?? "name";
+			if (!field.Equals("name", StringComparison.OrdinalIgnoreCase)
+				&& !field.Equals("signature", StringComparison.OrdinalIgnoreCase)
+				&& !field.Equals("ea", StringComparison.OrdinalIgnoreCase)) {
+				return ToolError(id, "Invalid field (use name|signature|ea).");
+			}
 			var match = input["match"]?.Value<string>() ?? "contains";
 			var caseSensitive = input["caseSensitive"]?.Value<bool?>() ?? false;
 			var limit = Math.Clamp(input["limit"]?.Value<int?>() ?? 20, 1, 200);
 			var offset = Math.Max(0, input["offset"]?.Value<int?>() ?? 0);
 			var fields = input["fields"] as JArray;
 
-			var queryNorm = caseSensitive ? query : query!.ToLowerInvariant();
+			string queryNorm = caseSensitive ? query! : query!.ToLowerInvariant();
 			var results = new List<JObject>();
 			var total = 0;
 
+			var queryEa = NormalizeEa(queryNorm);
 			for (var i = 0; i < list.Count; i++) {
 				var entry = list[i];
-				var name = entry.Name ?? string.Empty;
-				var nameNorm = caseSensitive ? name : (entry.NameLower ?? name.ToLowerInvariant());
-				if (!IsMatch(nameNorm, queryNorm, match))
+				if (!SymbolMatches(entry, field, match, caseSensitive, queryNorm, queryEa))
 					continue;
 
 				total++;
@@ -684,12 +786,143 @@ namespace Kiln.Mcp {
 						return ToolOk(id, SelectSymbolFields(entry, null));
 				}
 				else if (!string.IsNullOrWhiteSpace(ea)) {
-					if (string.Equals(entry.Ea, ea, StringComparison.OrdinalIgnoreCase))
+					var entryEa = NormalizeEa(entry.Ea);
+					var targetEa = NormalizeEa(ea);
+					if (entryEa == targetEa)
 						return ToolOk(id, SelectSymbolFields(entry, null));
 				}
 			}
 
 			return ToolError(id, "Symbol not found.");
+		}
+
+		JObject HandleAnalysisSymbolsXrefs(JToken? id, JObject input) {
+			var jobId = input["jobId"]?.Value<string>();
+			if (string.IsNullOrWhiteSpace(jobId))
+				return ToolError(id, "Missing jobId");
+
+			var name = input["name"]?.Value<string>();
+			var ea = input["ea"]?.Value<string>();
+			if (string.IsNullOrWhiteSpace(name) && string.IsNullOrWhiteSpace(ea))
+				return ToolError(id, "Missing name or ea");
+
+			var direction = input["direction"]?.Value<string>() ?? "both";
+			if (!direction.Equals("callers", StringComparison.OrdinalIgnoreCase)
+				&& !direction.Equals("callees", StringComparison.OrdinalIgnoreCase)
+				&& !direction.Equals("both", StringComparison.OrdinalIgnoreCase)) {
+				return ToolError(id, "Invalid direction (use callers|callees|both).");
+			}
+			var limit = Math.Clamp(input["limit"]?.Value<int?>() ?? 50, 1, 200);
+			var offset = Math.Max(0, input["offset"]?.Value<int?>() ?? 0);
+
+			var analysisDir = ResolveAnalysisDir(jobId, input);
+			if (string.IsNullOrWhiteSpace(analysisDir))
+				return ToolError(id, "Missing analysis directory (set idaOutputDir or run ida_analyze first).");
+
+			var list = LoadSymbolsPreferIndex(analysisDir);
+			var map = BuildSymbolMap(list);
+			var entry = FindSymbol(list, name, ea, input["caseSensitive"]?.Value<bool?>() ?? false);
+			if (entry is null)
+				return ToolError(id, "Symbol not found.");
+
+			var refs = new List<string>();
+			if (direction.Equals("callers", StringComparison.OrdinalIgnoreCase) || direction.Equals("both", StringComparison.OrdinalIgnoreCase))
+				refs.AddRange(entry.Callers ?? new List<string>());
+			if (direction.Equals("callees", StringComparison.OrdinalIgnoreCase) || direction.Equals("both", StringComparison.OrdinalIgnoreCase))
+				refs.AddRange(entry.Calls ?? new List<string>());
+
+			var normalized = refs.Select(NormalizeEa).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().ToList();
+			var results = new List<JObject>();
+			var total = 0;
+			foreach (var refEa in normalized) {
+				total++;
+				if (total <= offset)
+					continue;
+				if (results.Count >= limit)
+					continue;
+
+				if (map.TryGetValue(refEa, out var refEntry)) {
+					results.Add(new JObject {
+						["ea"] = refEntry.Ea,
+						["name"] = refEntry.Name,
+						["signature"] = refEntry.Signature,
+					});
+				}
+				else {
+					results.Add(new JObject {
+						["ea"] = refEa,
+						["name"] = null,
+					});
+				}
+			}
+
+			var payload = new JObject {
+				["count"] = results.Count,
+				["total"] = total,
+				["matches"] = new JArray(results),
+			};
+			return ToolOk(id, payload);
+		}
+
+		JObject HandleAnalysisStringsSearch(JToken? id, JObject input) {
+			var jobId = input["jobId"]?.Value<string>();
+			var query = input["query"]?.Value<string>();
+			if (string.IsNullOrWhiteSpace(jobId))
+				return ToolError(id, "Missing jobId");
+			if (string.IsNullOrWhiteSpace(query))
+				return ToolError(id, "Missing query");
+
+			var analysisDir = ResolveAnalysisDir(jobId, input);
+			if (string.IsNullOrWhiteSpace(analysisDir))
+				return ToolError(id, "Missing analysis directory (set idaOutputDir or run ida_analyze first).");
+
+			var list = LoadStringsPreferIndex(analysisDir);
+			var match = input["match"]?.Value<string>() ?? "contains";
+			var caseSensitive = input["caseSensitive"]?.Value<bool?>() ?? false;
+			var includeRefs = input["includeRefs"]?.Value<bool?>() ?? false;
+			var maxRefs = Math.Clamp(input["maxRefs"]?.Value<int?>() ?? 50, 0, 500);
+			var limit = Math.Clamp(input["limit"]?.Value<int?>() ?? 20, 1, 200);
+			var offset = Math.Max(0, input["offset"]?.Value<int?>() ?? 0);
+
+			var queryNorm = caseSensitive ? query : query!.ToLowerInvariant();
+			var results = new List<JObject>();
+			var total = 0;
+
+			foreach (var entry in list) {
+				var value = entry.Value ?? string.Empty;
+				var valueNorm = caseSensitive ? value : (entry.ValueLower ?? value.ToLowerInvariant());
+				if (!IsMatch(valueNorm, queryNorm, match))
+					continue;
+
+				total++;
+				if (total <= offset)
+					continue;
+				if (results.Count >= limit)
+					continue;
+
+				var obj = new JObject {
+					["ea"] = entry.Ea,
+					["value"] = entry.Value,
+					["length"] = entry.Length,
+					["refCount"] = entry.RefCount,
+				};
+				if (includeRefs && entry.Refs is not null) {
+					var refs = entry.Refs.Take(maxRefs).Select(r => new JObject {
+						["funcEa"] = r.FuncEa,
+						["funcName"] = r.FuncName,
+						["refEa"] = r.RefEa,
+					});
+					obj["refs"] = new JArray(refs);
+				}
+				results.Add(obj);
+			}
+
+			var payload = new JObject {
+				["count"] = results.Count,
+				["total"] = total,
+				["matches"] = new JArray(results),
+			};
+			return ToolOk(id, payload);
 		}
 
 		JObject HandleAnalysisPseudocodeSearch(JToken? id, JObject input) {
@@ -728,6 +961,8 @@ namespace Kiln.Mcp {
 				results.Add(new JObject {
 					["name"] = entry.Name,
 					["ea"] = entry.Ea,
+					["signature"] = entry.Signature,
+					["fallback"] = entry.Fallback,
 					["snippet"] = BuildSnippet(code, index, snippetChars),
 				});
 			}
@@ -777,8 +1012,12 @@ namespace Kiln.Mcp {
 				var payload = new JObject {
 					["name"] = entry.Name,
 					["ea"] = entry.Ea,
+					["endEa"] = entry.EndEa,
+					["size"] = entry.Size,
+					["signature"] = entry.Signature,
 					["pseudocode"] = text,
-					["truncated"] = truncated,
+					["fallback"] = entry.Fallback,
+					["truncated"] = truncated || entry.Truncated,
 				};
 				return ToolOk(id, payload);
 			}
@@ -924,20 +1163,52 @@ namespace Kiln.Mcp {
 			}
 		}
 
-		static List<SymbolEntry> LoadSymbolsPreferIndex(string analysisDir) {
-			var indexPath = Path.Combine(analysisDir, "symbols.index.json");
+		List<SymbolEntry> LoadSymbolsPreferIndex(string analysisDir) {
 			var symbolsPath = Path.Combine(analysisDir, "symbols.json");
-			if (File.Exists(indexPath))
-				return LoadSymbols(indexPath);
+			if (!File.Exists(symbolsPath))
+				return new List<SymbolEntry>();
+
+			var cachePath = GetIndexCachePath(symbolsPath, "symbols.index.json");
+			if (File.Exists(cachePath))
+				return LoadSymbols(cachePath);
+
+			var localIndex = Path.Combine(analysisDir, "symbols.index.json");
+			if (File.Exists(localIndex))
+				return LoadSymbols(localIndex);
+
 			return LoadSymbols(symbolsPath);
 		}
 
-		static List<PseudocodeEntry> LoadPseudocodePreferIndex(string analysisDir) {
-			var indexPath = Path.Combine(analysisDir, "pseudocode.index.json");
+		List<PseudocodeEntry> LoadPseudocodePreferIndex(string analysisDir) {
 			var pseudocodePath = Path.Combine(analysisDir, "pseudocode.json");
-			if (File.Exists(indexPath))
-				return LoadPseudocode(indexPath);
+			if (!File.Exists(pseudocodePath))
+				return new List<PseudocodeEntry>();
+
+			var cachePath = GetIndexCachePath(pseudocodePath, "pseudocode.index.json");
+			if (File.Exists(cachePath))
+				return LoadPseudocode(cachePath);
+
+			var localIndex = Path.Combine(analysisDir, "pseudocode.index.json");
+			if (File.Exists(localIndex))
+				return LoadPseudocode(localIndex);
+
 			return LoadPseudocode(pseudocodePath);
+		}
+
+		List<StringEntry> LoadStringsPreferIndex(string analysisDir) {
+			var stringsPath = Path.Combine(analysisDir, "strings.json");
+			if (!File.Exists(stringsPath))
+				return new List<StringEntry>();
+
+			var cachePath = GetIndexCachePath(stringsPath, "strings.index.json");
+			if (File.Exists(cachePath))
+				return LoadStrings(cachePath);
+
+			var localIndex = Path.Combine(analysisDir, "strings.index.json");
+			if (File.Exists(localIndex))
+				return LoadStrings(localIndex);
+
+			return LoadStrings(stringsPath);
 		}
 
 		static List<SymbolEntry> LoadSymbols(string path) {
@@ -954,12 +1225,19 @@ namespace Kiln.Mcp {
 				var obj = token as JObject;
 				if (obj is null)
 					continue;
+				var callsToken = obj["calls"] as JArray;
+				var callersToken = obj["callers"] as JArray;
 				list.Add(new SymbolEntry {
 					Name = obj["name"]?.Value<string>() ?? string.Empty,
 					NameLower = obj["nameLower"]?.Value<string>(),
 					Ea = obj["ea"]?.Value<string>() ?? string.Empty,
+					EndEa = obj["endEa"]?.Value<string>(),
+					Size = obj["size"]?.Value<long?>() ?? 0,
 					Signature = obj["signature"]?.Value<string>(),
+					SignatureLower = obj["signatureLower"]?.Value<string>(),
 					Segment = obj["segment"]?.Value<string>(),
+					Calls = callsToken is null ? null : callsToken.Values<string>().Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x!).ToList(),
+					Callers = callersToken is null ? null : callersToken.Values<string>().Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x!).ToList(),
 				});
 			}
 			return list;
@@ -983,8 +1261,53 @@ namespace Kiln.Mcp {
 					Name = obj["name"]?.Value<string>() ?? string.Empty,
 					NameLower = obj["nameLower"]?.Value<string>(),
 					Ea = obj["ea"]?.Value<string>() ?? string.Empty,
+					EndEa = obj["endEa"]?.Value<string>(),
+					Size = obj["size"]?.Value<long?>() ?? 0,
+					Signature = obj["signature"]?.Value<string>(),
 					Pseudocode = obj["pseudocode"]?.Value<string>() ?? string.Empty,
 					PseudocodeLower = obj["pseudocodeLower"]?.Value<string>(),
+					Fallback = obj["fallback"]?.Value<string>(),
+					Truncated = obj["truncated"]?.Value<bool?>() ?? false,
+				});
+			}
+			return list;
+		}
+
+		static List<StringEntry> LoadStrings(string path) {
+			if (!File.Exists(path))
+				return new List<StringEntry>();
+
+			var root = JObject.Parse(File.ReadAllText(path));
+			var items = root["strings"] as JArray;
+			if (items is null)
+				return new List<StringEntry>();
+
+			var list = new List<StringEntry>(items.Count);
+			foreach (var token in items) {
+				var obj = token as JObject;
+				if (obj is null)
+					continue;
+				List<StringRef>? refs = null;
+				if (obj["refs"] is JArray refsToken) {
+					refs = new List<StringRef>();
+					foreach (var refToken in refsToken) {
+						var refObj = refToken as JObject;
+						if (refObj is null)
+							continue;
+						refs.Add(new StringRef {
+							FuncEa = refObj["funcEa"]?.Value<string>() ?? string.Empty,
+							FuncName = refObj["funcName"]?.Value<string>(),
+							RefEa = refObj["refEa"]?.Value<string>() ?? string.Empty,
+						});
+					}
+				}
+				list.Add(new StringEntry {
+					Ea = obj["ea"]?.Value<string>() ?? string.Empty,
+					Value = obj["value"]?.Value<string>() ?? string.Empty,
+					ValueLower = obj["valueLower"]?.Value<string>(),
+					Length = obj["length"]?.Value<int?>() ?? 0,
+					RefCount = obj["refCount"]?.Value<int?>() ?? 0,
+					Refs = refs,
 				});
 			}
 			return list;
@@ -998,8 +1321,13 @@ namespace Kiln.Mcp {
 					["name"] = entry.Name,
 					["nameLower"] = entry.Name?.ToLowerInvariant(),
 					["ea"] = entry.Ea,
+					["endEa"] = entry.EndEa,
+					["size"] = entry.Size,
 					["signature"] = entry.Signature,
+					["signatureLower"] = entry.Signature?.ToLowerInvariant(),
 					["segment"] = entry.Segment,
+					["calls"] = entry.Calls is null ? null : new JArray(entry.Calls),
+					["callers"] = entry.Callers is null ? null : new JArray(entry.Callers),
 				});
 			}
 
@@ -1019,8 +1347,13 @@ namespace Kiln.Mcp {
 					["name"] = entry.Name,
 					["nameLower"] = entry.Name?.ToLowerInvariant(),
 					["ea"] = entry.Ea,
+					["endEa"] = entry.EndEa,
+					["size"] = entry.Size,
+					["signature"] = entry.Signature,
 					["pseudocode"] = code,
 					["pseudocodeLower"] = code.ToLowerInvariant(),
+					["fallback"] = entry.Fallback,
+					["truncated"] = entry.Truncated,
 				});
 			}
 
@@ -1031,13 +1364,124 @@ namespace Kiln.Mcp {
 			File.WriteAllText(path, root.ToString(Formatting.Indented));
 		}
 
+		static void SaveStringsIndex(string path, List<StringEntry> strings) {
+			Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ".");
+			var items = new JArray();
+			foreach (var entry in strings) {
+				items.Add(new JObject {
+					["ea"] = entry.Ea,
+					["value"] = entry.Value,
+					["valueLower"] = entry.Value?.ToLowerInvariant(),
+					["length"] = entry.Length,
+					["refCount"] = entry.RefCount,
+					["refs"] = entry.Refs is null ? null : new JArray(entry.Refs.Select(r => new JObject {
+						["funcEa"] = r.FuncEa,
+						["funcName"] = r.FuncName,
+						["refEa"] = r.RefEa,
+					})),
+				});
+			}
+
+			var root = new JObject {
+				["count"] = strings.Count,
+				["strings"] = items,
+			};
+			File.WriteAllText(path, root.ToString(Formatting.Indented));
+		}
+
+		Dictionary<string, SymbolEntry> BuildSymbolMap(List<SymbolEntry> list) {
+			var map = new Dictionary<string, SymbolEntry>(StringComparer.OrdinalIgnoreCase);
+			foreach (var entry in list) {
+				var key = NormalizeEa(entry.Ea);
+				if (!string.IsNullOrWhiteSpace(key) && !map.ContainsKey(key))
+					map[key] = entry;
+			}
+			return map;
+		}
+
+		SymbolEntry? FindSymbol(List<SymbolEntry> list, string? name, string? ea, bool caseSensitive) {
+			if (!string.IsNullOrWhiteSpace(name)) {
+				var nameNorm = caseSensitive ? name : name!.ToLowerInvariant();
+				foreach (var entry in list) {
+					var entryName = entry.Name ?? string.Empty;
+					var entryNorm = caseSensitive ? entryName : (entry.NameLower ?? entryName.ToLowerInvariant());
+					if (entryNorm == nameNorm)
+						return entry;
+				}
+				return null;
+			}
+
+			if (!string.IsNullOrWhiteSpace(ea)) {
+				var target = NormalizeEa(ea);
+				foreach (var entry in list) {
+					var entryEa = NormalizeEa(entry.Ea);
+					if (entryEa == target)
+						return entry;
+				}
+			}
+
+			return null;
+		}
+
+		static bool SymbolMatches(SymbolEntry entry, string field, string match, bool caseSensitive, string queryNorm, string queryEa) {
+			if (field.Equals("ea", StringComparison.OrdinalIgnoreCase)) {
+				var entryEa = NormalizeEa(entry.Ea);
+				var query = NormalizeEa(queryEa);
+				if (string.IsNullOrWhiteSpace(query))
+					return false;
+				return IsMatch(entryEa, query, match);
+			}
+
+			if (field.Equals("signature", StringComparison.OrdinalIgnoreCase)) {
+				var sig = entry.Signature ?? string.Empty;
+				var sigNorm = caseSensitive ? sig : (entry.SignatureLower ?? sig.ToLowerInvariant());
+				return IsMatch(sigNorm, queryNorm, match);
+			}
+
+			var name = entry.Name ?? string.Empty;
+			var nameNorm = caseSensitive ? name : (entry.NameLower ?? name.ToLowerInvariant());
+			return IsMatch(nameNorm, queryNorm, match);
+		}
+
+		static string NormalizeEa(string? value) {
+			if (string.IsNullOrWhiteSpace(value))
+				return string.Empty;
+			var text = value.Trim();
+			if (text.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+				text = text[2..];
+			if (ulong.TryParse(text, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var hex))
+				return $"0x{hex:x}";
+			if (ulong.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var dec))
+				return $"0x{dec:x}";
+			return value.Trim().ToLowerInvariant();
+		}
+
+		string GetIndexCachePath(string artifactPath, string indexFileName) {
+			var info = new FileInfo(artifactPath);
+			var key = ComputeHash($"{artifactPath}|{info.Length}|{info.LastWriteTimeUtc.Ticks}");
+			var cacheDir = Path.Combine(config.WorkspaceRoot, "index-cache");
+			Directory.CreateDirectory(cacheDir);
+			return Path.Combine(cacheDir, $"{key}.{indexFileName}");
+		}
+
+		static string ComputeHash(string input) {
+			using var sha = SHA256.Create();
+			var bytes = Encoding.UTF8.GetBytes(input);
+			var hash = sha.ComputeHash(bytes);
+			return Convert.ToHexString(hash).ToLowerInvariant();
+		}
+
 		static JObject SelectSymbolFields(SymbolEntry entry, JArray? fields) {
 			if (fields is null || fields.Count == 0) {
 				return new JObject {
 					["name"] = entry.Name,
 					["ea"] = entry.Ea,
+					["endEa"] = entry.EndEa,
+					["size"] = entry.Size,
 					["signature"] = entry.Signature,
 					["segment"] = entry.Segment,
+					["calls"] = entry.Calls is null ? null : new JArray(entry.Calls),
+					["callers"] = entry.Callers is null ? null : new JArray(entry.Callers),
 				};
 			}
 
@@ -1051,11 +1495,23 @@ namespace Kiln.Mcp {
 					case "ea":
 						obj["ea"] = entry.Ea;
 						break;
+					case "endEa":
+						obj["endEa"] = entry.EndEa;
+						break;
+					case "size":
+						obj["size"] = entry.Size;
+						break;
 					case "signature":
 						obj["signature"] = entry.Signature;
 						break;
 					case "segment":
 						obj["segment"] = entry.Segment;
+						break;
+					case "calls":
+						obj["calls"] = entry.Calls is null ? null : new JArray(entry.Calls);
+						break;
+					case "callers":
+						obj["callers"] = entry.Callers is null ? null : new JArray(entry.Callers);
 						break;
 				}
 			}
@@ -1185,16 +1641,41 @@ namespace Kiln.Mcp {
 			public string Name { get; set; } = string.Empty;
 			public string? NameLower { get; set; }
 			public string Ea { get; set; } = string.Empty;
+			public string? EndEa { get; set; }
+			public long Size { get; set; }
 			public string? Signature { get; set; }
+			public string? SignatureLower { get; set; }
 			public string? Segment { get; set; }
+			public List<string>? Calls { get; set; }
+			public List<string>? Callers { get; set; }
 		}
 
 		sealed class PseudocodeEntry {
 			public string Name { get; set; } = string.Empty;
 			public string? NameLower { get; set; }
 			public string Ea { get; set; } = string.Empty;
+			public string? EndEa { get; set; }
+			public long Size { get; set; }
+			public string? Signature { get; set; }
 			public string? Pseudocode { get; set; }
 			public string? PseudocodeLower { get; set; }
+			public string? Fallback { get; set; }
+			public bool Truncated { get; set; }
+		}
+
+		sealed class StringEntry {
+			public string Ea { get; set; } = string.Empty;
+			public string? Value { get; set; }
+			public string? ValueLower { get; set; }
+			public int Length { get; set; }
+			public int RefCount { get; set; }
+			public List<StringRef>? Refs { get; set; }
+		}
+
+		sealed class StringRef {
+			public string FuncEa { get; set; } = string.Empty;
+			public string? FuncName { get; set; }
+			public string RefEa { get; set; } = string.Empty;
 		}
 
 		static JObject ToolOk(JToken? id, JToken payload) {
@@ -1305,6 +1786,8 @@ Arguments: { ""jobId"": ""..."" }
   { ""gameDir"": ""C:\\Games\\Example"", ""dumperPath"": ""C:\\Kiln\\Il2CppDumper"" }
 - ida_analyze
   { ""gameDir"": ""C:\\Games\\Example"", ""idaPath"": ""C:\\Program Files\\IDA Professional 9.2\\idat64.exe"", ""reuseExisting"": true }
+- ida_register_db
+  { ""gameDir"": ""C:\\Games\\Example"", ""databasePath"": ""C:\\Tools\\GameAssembly.i64"", ""copyToIdbDir"": true, ""overwrite"": false }
 - ida_export_symbols
   { ""jobId"": ""..."" }
 - ida_export_pseudocode
@@ -1312,9 +1795,13 @@ Arguments: { ""jobId"": ""..."" }
 - analysis.index.build
   { ""jobId"": ""..."" }
 - analysis.symbols.search
-  { ""jobId"": ""..."", ""query"": ""Player"", ""match"": ""contains"", ""limit"": 20 }
+  { ""jobId"": ""..."", ""query"": ""Player"", ""field"": ""name"", ""match"": ""contains"", ""limit"": 20, ""fields"": [""name"", ""ea"", ""signature""] }
 - analysis.symbols.get
   { ""jobId"": ""..."", ""name"": ""Player_Update"" }
+- analysis.symbols.xrefs
+  { ""jobId"": ""..."", ""name"": ""Player_Update"", ""direction"": ""both"", ""limit"": 50 }
+- analysis.strings.search
+  { ""jobId"": ""..."", ""query"": ""weapon"", ""match"": ""contains"", ""includeRefs"": true, ""maxRefs"": 20 }
 - analysis.pseudocode.search
   { ""jobId"": ""..."", ""query"": ""weaponId"", ""limit"": 10, ""snippetChars"": 300 }
 - analysis.pseudocode.get
