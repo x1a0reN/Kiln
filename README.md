@@ -49,6 +49,28 @@ Optional logging:
 ## Config defaults
 - `modsRoot` defaults to `mods\` under the Kiln root. `patch_codegen` will auto-generate per-game plugin projects here.
 
+## ida-pro-mcp proxy (live IDA tools)
+Kiln can spawn `ida-pro-mcp` as a stdio child process and expose its tool list as `ida.*` tools.
+
+Requirements:
+- Install ida-pro-mcp and the IDA plugin (RPC server).
+- Ensure the IDA plugin RPC is reachable (default: `http://127.0.0.1:13337`).
+
+Example config (kiln.config.json):
+```json
+{
+  "idaMcpEnabled": true,
+  "idaMcpCommand": "ida-pro-mcp",
+  "idaMcpArgs": [
+    "--transport",
+    "stdio",
+    "--ida-rpc",
+    "http://127.0.0.1:13337"
+  ]
+}
+```
+When enabled, `tools/list` will include `ida.*` entries and `tools/call` will forward to ida-pro-mcp in real time.
+
 ## MCP tools
 - `kiln.help`
 - `kiln.exampleFlow`
@@ -73,6 +95,7 @@ Optional logging:
 - `analysis.pseudocode.ensure`
 - `patch_codegen`
 - `package_mod`
+- `ida.*` (proxied from ida-pro-mcp when configured)
 
 ## analysis.* usage (offline artifacts)
 These tools operate on exported artifacts under `idaOutputDir` (default: `ida/`).

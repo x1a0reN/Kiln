@@ -20,6 +20,7 @@ namespace Kiln.Mcp {
 		readonly ResourceCatalog resources;
 		readonly JobManager jobManager;
 		readonly KilnConfig config;
+		readonly IdaMcpProxy? idaProxy;
 		bool hasReadExampleFlow;
 
 		public McpServer(JobManager jobManager, KilnConfig config) {
@@ -27,32 +28,38 @@ namespace Kiln.Mcp {
 			this.config = config ?? throw new ArgumentNullException(nameof(config));
 			catalog = new ToolCatalog();
 			resources = new ResourceCatalog();
+			idaProxy = IdaMcpProxy.TryCreate(config);
 			hasReadExampleFlow = false;
 		}
 
 		public async Task RunAsync(CancellationToken token) {
-			while (!token.IsCancellationRequested) {
-				var line = await Console.In.ReadLineAsync().ConfigureAwait(false);
-				if (line is null)
-					break;
-				if (string.IsNullOrWhiteSpace(line))
-					continue;
+			try {
+				while (!token.IsCancellationRequested) {
+					var line = await Console.In.ReadLineAsync().ConfigureAwait(false);
+					if (line is null)
+						break;
+					if (string.IsNullOrWhiteSpace(line))
+						continue;
 
-				JObject request;
-				try {
-					request = JObject.Parse(line);
+					JObject request;
+					try {
+						request = JObject.Parse(line);
+					}
+					catch (JsonException) {
+						KilnLog.Warn("stdio parse error");
+						await WriteResponseAsync(MakeError(null, -32700, "Parse error")).ConfigureAwait(false);
+						continue;
+					}
+
+					KilnLog.Info($"stdio request: {request["method"]?.Value<string>() ?? "(null)"}");
+					var response = await HandleRequestAsync(request, token).ConfigureAwait(false);
+					if (response is null)
+						continue;
+					await WriteResponseAsync(response).ConfigureAwait(false);
 				}
-				catch (JsonException) {
-				KilnLog.Warn("stdio parse error");
-				await WriteResponseAsync(MakeError(null, -32700, "Parse error")).ConfigureAwait(false);
-				continue;
 			}
-
-			KilnLog.Info($"stdio request: {request["method"]?.Value<string>() ?? "(null)"}");
-			var response = await HandleRequestAsync(request, token).ConfigureAwait(false);
-			if (response is null)
-				continue;
-			await WriteResponseAsync(response).ConfigureAwait(false);
+			finally {
+				idaProxy?.Dispose();
 			}
 		}
 
@@ -65,7 +72,7 @@ namespace Kiln.Mcp {
 			if (method == "initialize")
 				return Initialize(request, id);
 			if (method == "tools/list")
-				return ToolsList(id);
+				return await ToolsListAsync(id, token).ConfigureAwait(false);
 			if (method == "tools/call")
 				return await ToolsCallAsync(request, id, token).ConfigureAwait(false);
 			if (method == "resources/list")
@@ -94,13 +101,30 @@ namespace Kiln.Mcp {
 			return MakeResult(id, result);
 		}
 
-		JObject ToolsList(JToken? id) {
-			var tools = catalog.Tools.Values
-				.Select(tool => new JObject {
+		async Task<JObject> ToolsListAsync(JToken? id, CancellationToken token) {
+			var tools = new List<JObject>();
+			foreach (var tool in catalog.Tools.Values) {
+				tools.Add(new JObject {
 					["name"] = tool.Name,
 					["description"] = tool.Description,
 					["inputSchema"] = tool.InputSchema,
 				});
+			}
+
+			if (idaProxy is not null && idaProxy.Enabled) {
+				var proxyTools = await idaProxy.GetToolsAsync(token).ConfigureAwait(false);
+				foreach (var tool in proxyTools) {
+					var description = string.IsNullOrWhiteSpace(tool.Description)
+						? "ida-pro-mcp tool"
+						: tool.Description + " (via ida-pro-mcp)";
+					tools.Add(new JObject {
+						["name"] = idaProxy.Prefix + tool.Name,
+						["description"] = description,
+						["inputSchema"] = tool.InputSchema,
+					});
+				}
+			}
+
 			return MakeResult(id, new JObject { ["tools"] = new JArray(tools) });
 		}
 
@@ -143,12 +167,23 @@ namespace Kiln.Mcp {
 			if (string.IsNullOrWhiteSpace(name))
 				return MakeError(id, -32602, "Missing tool name");
 
-			if (!catalog.Tools.TryGetValue(name, out var tool))
-				return MakeError(id, -32601, $"Unknown tool: {name}");
-
 			KilnLog.Info($"tool call: {name}");
-			if (tool.Method != "__local.exampleFlow" && tool.Method != "__local.help" && !hasReadExampleFlow) {
+			if (name != "kiln.exampleFlow" && name != "kiln.help" && !hasReadExampleFlow) {
 				return ToolError(id, "Please call kiln.exampleFlow first to read tool guidance before invoking other tools.");
+			}
+
+			if (!catalog.Tools.TryGetValue(name, out var tool)) {
+				if (idaProxy is not null && idaProxy.Enabled && idaProxy.IsProxyTool(name)) {
+					var proxyResult = await idaProxy.CallToolAsync(name, input, token).ConfigureAwait(false);
+					return MakeResult(id, proxyResult);
+				}
+
+				if (idaProxy is null || !idaProxy.Enabled) {
+					if (!string.IsNullOrWhiteSpace(name) && name.StartsWith("ida.", StringComparison.OrdinalIgnoreCase))
+						return ToolError(id, "ida-pro-mcp proxy is disabled. Configure kiln.config.json (idaMcpEnabled + idaMcpCommand).");
+				}
+
+				return MakeError(id, -32601, $"Unknown tool: {name}");
 			}
 
 			if (tool.Method == "__local.help") {
@@ -2484,7 +2519,8 @@ Common flow:
 4) workflow.cancel -> stop job
 
 Notes:
-- Use resources/list and resources/read to load embedded docs (e.g. BepInEx).";
+- Use resources/list and resources/read to load embedded docs (e.g. BepInEx).
+- ida.* tools are proxied from ida-pro-mcp when enabled in kiln.config.json.";
 
 		sealed class PluginProjectResult {
 			public bool Success { get; set; }
@@ -2732,6 +2768,7 @@ Notes:
 IMPORTANT
 - You MUST call kiln.exampleFlow before using any other tool. The server enforces this.
 - Read kiln.help for a short summary, then return here for full guidance.
+- If ida-pro-mcp proxy is enabled, additional ida.* tools are available for real-time IDA queries.
 
 Recommended end-to-end order (Unity IL2CPP):
 detect_engine -> unity_locate -> il2cpp_dump (or manual dump) -> ida_analyze (or ida_register_db)
