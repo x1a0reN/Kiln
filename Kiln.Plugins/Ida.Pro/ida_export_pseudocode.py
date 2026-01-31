@@ -51,6 +51,60 @@ def _disasm_func(ea, max_lines=400):
 			break
 	return "\n".join(lines), len(lines) >= max_lines
 
+def _parse_json_list(value):
+	if not value:
+		return None
+	try:
+		data = json.loads(value)
+	except Exception:
+		return None
+	if isinstance(data, list):
+		return [str(x) for x in data if x is not None and str(x).strip() != ""]
+	return None
+
+def _parse_ea(value):
+	if value is None:
+		return None
+	try:
+		return int(str(value).strip(), 0)
+	except Exception:
+		return None
+
+def _resolve_name_ea(name):
+	try:
+		ea = idc.get_name_ea_simple(name)
+		if ea != idaapi.BADADDR:
+			return ea
+	except Exception:
+		pass
+	try:
+		ea = idc.get_name_ea(idaapi.BADADDR, name)
+		if ea != idaapi.BADADDR:
+			return ea
+	except Exception:
+		pass
+	return None
+
+def _collect_target_eas(name_list, ea_list):
+	targets = set()
+	if ea_list:
+		for value in ea_list:
+			ea = _parse_ea(value)
+			if ea is None:
+				continue
+			func = ida_funcs.get_func(ea)
+			if func:
+				targets.add(func.start_ea)
+	if name_list:
+		for name in name_list:
+			ea = _resolve_name_ea(name)
+			if ea is None or ea == idaapi.BADADDR:
+				continue
+			func = ida_funcs.get_func(ea)
+			if func:
+				targets.add(func.start_ea)
+	return sorted(list(targets))
+
 def main():
 	out_path = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("KILN_EXPORT_OUTPUT")
 	name_filter = sys.argv[2] if len(sys.argv) > 2 else os.environ.get("KILN_EXPORT_FILTER")
@@ -60,13 +114,18 @@ def main():
 
 	has_hexrays = _init_hexrays()
 
+	name_list = _parse_json_list(os.environ.get("KILN_EXPORT_NAMES"))
+	ea_list = _parse_json_list(os.environ.get("KILN_EXPORT_EAS"))
+	target_eas = _collect_target_eas(name_list, ea_list)
+
 	items = []
 	fallback_used = False
-	for ea in idautils.Functions():
+	functions_iter = target_eas if target_eas else idautils.Functions()
+	for ea in functions_iter:
 		name = idc.get_name(ea)
 		if not name:
 			continue
-		if name_filter and name_filter not in name:
+		if not target_eas and name_filter and name_filter not in name:
 			continue
 		end_ea, size = _func_range(ea)
 		text = _decompile_to_text(ea) if has_hexrays else None
