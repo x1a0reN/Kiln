@@ -53,6 +53,7 @@
 - 2026-01-30: Phase 3/4 fix — reuseExisting also validates script.json and il2cpp.h metadata.
 - 2026-01-30: Phase 4/5 enhancements — export call graph + strings, add analysis xrefs/strings search + cross-job index cache, and enrich patch_codegen with targets + IL2CPP hook template.
 - 2026-01-30: Phase 3/4 enhancement — ida_register_db imports external .i64/.idb and writes Kiln metadata for reuse.
+- 2026-01-30: Deployment — MCP resolves plugin DLLs from publish/Plugins folder for cleaner release layout.
 
 ## Next Steps
 - Implement Phase 3: IDA headless analysis + symbol/typing load.

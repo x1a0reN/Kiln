@@ -1,4 +1,7 @@
 using System;
+using System.IO;
+using System.Reflection;
+using System.Runtime.Loader;
 using System.Threading;
 using System.Threading.Tasks;
 using Kiln.Core;
@@ -7,6 +10,7 @@ namespace Kiln.Mcp {
 	static class Program {
 		static async Task<int> Main(string[] args) {
 			try {
+				RegisterPluginResolver();
 				KilnLog.Info("kiln mcp start");
 				var config = KilnConfig.Load();
 				var jobManager = new JobManager(config);
@@ -29,6 +33,22 @@ namespace Kiln.Mcp {
 				Console.Error.WriteLine(ex.Message);
 				return 2;
 			}
+		}
+
+		static void RegisterPluginResolver() {
+			var baseDir = AppContext.BaseDirectory;
+			var pluginsDir = Path.Combine(baseDir, "Plugins");
+			if (!Directory.Exists(pluginsDir))
+				return;
+
+			AssemblyLoadContext.Default.Resolving += (_, name) => {
+				if (string.IsNullOrWhiteSpace(name.Name))
+					return null;
+				var candidate = Path.Combine(pluginsDir, $"{name.Name}.dll");
+				if (File.Exists(candidate))
+					return AssemblyLoadContext.Default.LoadFromAssemblyPath(candidate);
+				return null;
+			};
 		}
 	}
 }

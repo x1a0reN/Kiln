@@ -54,6 +54,7 @@
 
 - 2026-01-30：Phase 4/5 增强——导出调用关系/字符串，新增 analysis xrefs/strings 搜索 + 跨 job 索引缓存，并让 patch_codegen 生成目标清单 + IL2CPP hook 模板。
 - 2026-01-30：Phase 3/4 增强——ida_register_db 支持导入外部 .i64/.idb 并写入 Kiln 元数据用于复用。
+- 2026-01-30：发布结构——MCP 可从 publish/Plugins 目录加载插件 DLL，方便整理发布目录。
 ## 下一步
 - 实现 Phase 3：IDA headless 分析 + 符号/类型加载。
 - 实现 Phase 4：符号与伪代码导出。
