@@ -1752,8 +1752,9 @@ Notes:
 - kiln.exampleFlow: full usage examples (this text).
 - kiln.help: short summary and tips.
 
-1) Run a workflow
+1) Run a workflow (high-level, optional)
 Tool: workflow.run
+Purpose: Run a predefined workflow (currently Unity IL2CPP pipeline).
 Arguments:
 {
   ""flowName"": ""unity.il2cpp"",
@@ -1762,56 +1763,101 @@ Arguments:
     ""outputDir"": ""C:\\Kiln\\output""
   }
 }
+Notes:
+- outputDir is workflow-specific; step tools below are more flexible.
 Returns: { ""jobId"": ""..."" }
 
 2) Check status
 Tool: workflow.status
+Purpose: Read job progress/stage/state.
 Arguments: { ""jobId"": ""..."" }
 Returns: { ""percent"": 0-100, ""stage"": ""..."", ""state"": ""Running|Completed|Failed"" }
 
 3) Tail logs
 Tool: workflow.logs
+Purpose: Stream recent job log lines (headless tools print here).
 Arguments: { ""jobId"": ""..."", ""tail"": 200 }
 
 4) Cancel
 Tool: workflow.cancel
+Purpose: Stop a running job (best-effort).
 Arguments: { ""jobId"": ""..."" }
 
-5) Step tools (advanced users)
+5) Step tools (recommended for precise control)
 - detect_engine
-  { ""gameDir"": ""C:\\Games\\Example"" }
+  Purpose: Identify Unity/Mono/IL2CPP fingerprints.
+  Notes: Use before running IL2CPP tools.
+  Args: { ""gameDir"": ""C:\\Games\\Example"" }
 - unity_locate
-  { ""gameDir"": ""C:\\Games\\Example"" }
+  Purpose: Locate GameAssembly.dll / global-metadata.dat paths.
+  Notes: Returns IL2CPP metadata + managed/data folders.
+  Args: { ""gameDir"": ""C:\\Games\\Example"" }
 - il2cpp_dump
-  { ""gameDir"": ""C:\\Games\\Example"", ""dumperPath"": ""C:\\Kiln\\Il2CppDumper"" }
+  Purpose: Run Il2CppDumper to create script.json + il2cpp.h.
+  Notes:
+  - Output dir is enforced: il2cppRootDir/<game-name>.
+  - dumperPath override must match config il2cppRootDir or its Il2CppDumper.exe.
+  Args: { ""gameDir"": ""C:\\Games\\Example"" }
 - ida_analyze
-  { ""gameDir"": ""C:\\Games\\Example"", ""idaPath"": ""C:\\Program Files\\IDA Professional 9.2\\idat64.exe"", ""reuseExisting"": true }
+  Purpose: Run IDA headless analysis and auto-load Il2CppDumper symbols.
+  Notes:
+  - Uses idaPath from kiln.config.json (override blocked).
+  - Reuses existing DB only if metadata matches current game + dump inputs.
+  - idbDir defaults to idaOutputDir/<game-name>.
+  Args: { ""gameDir"": ""C:\\Games\\Example"", ""idaPath"": ""C:\\Program Files\\IDA Professional 9.2\\idat64.exe"", ""reuseExisting"": true }
 - ida_register_db
-  { ""gameDir"": ""C:\\Games\\Example"", ""databasePath"": ""C:\\Tools\\GameAssembly.i64"", ""copyToIdbDir"": true, ""overwrite"": false }
+  Purpose: Import a pre-existing .i64/.idb into Kiln (no re-analysis).
+  Notes:
+  - Requires script.json + il2cpp.h in il2cppRootDir/<game-name>.
+  - Writes .kiln.json metadata next to the DB.
+  - copyToIdbDir=true copies DB into idaOutputDir/<game-name>.
+  Args: { ""gameDir"": ""C:\\Games\\Example"", ""databasePath"": ""C:\\Tools\\GameAssembly.i64"", ""copyToIdbDir"": true, ""overwrite"": false }
 - ida_export_symbols
-  { ""jobId"": ""..."" }
+  Purpose: Export functions, signatures, sizes, call graph, and strings.
+  Notes: Produces symbols.json + strings.json in analysis directory.
+  Args: { ""jobId"": ""..."" }
 - ida_export_pseudocode
-  { ""jobId"": ""..."", ""nameFilter"": ""Player"" }
-- analysis.index.build
-  { ""jobId"": ""..."" }
-- analysis.symbols.search
-  { ""jobId"": ""..."", ""query"": ""Player"", ""field"": ""name"", ""match"": ""contains"", ""limit"": 20, ""fields"": [""name"", ""ea"", ""signature""] }
-- analysis.symbols.get
-  { ""jobId"": ""..."", ""name"": ""Player_Update"" }
-- analysis.symbols.xrefs
-  { ""jobId"": ""..."", ""name"": ""Player_Update"", ""direction"": ""both"", ""limit"": 50 }
-- analysis.strings.search
-  { ""jobId"": ""..."", ""query"": ""weapon"", ""match"": ""contains"", ""includeRefs"": true, ""maxRefs"": 20 }
-- analysis.pseudocode.search
-  { ""jobId"": ""..."", ""query"": ""weaponId"", ""limit"": 10, ""snippetChars"": 300 }
-- analysis.pseudocode.get
-  { ""jobId"": ""..."", ""name"": ""Player_Update"", ""maxChars"": 4000 }
-- patch_codegen
-  { ""requirements"": ""..."", ""analysisArtifacts"": [""...""] }
-- package_mod
-  { ""outputDir"": ""C:\\Kiln\\output"" }
+  Purpose: Export pseudocode for functions (Hex-Rays).
+  Notes: Falls back to disassembly if Hex-Rays not available.
+  Args: { ""jobId"": ""..."", ""nameFilter"": ""Player"" }
 
-6) MCP resources (BepInEx docs)
+6) Offline analysis tools (AI-friendly search)
+- analysis.index.build
+  Purpose: Build local + cached indexes (symbols, strings, pseudocode).
+  Notes: Speeds up subsequent searches across jobs.
+  Args: { ""jobId"": ""..."" }
+- analysis.symbols.search
+  Purpose: Search symbols by name/signature/address.
+  Notes: field=name|signature|ea, match=contains|exact.
+  Args: { ""jobId"": ""..."", ""query"": ""Player"", ""field"": ""name"", ""match"": ""contains"", ""limit"": 20, ""fields"": [""name"", ""ea"", ""signature""] }
+- analysis.symbols.get
+  Purpose: Fetch full symbol entry by name or address.
+  Args: { ""jobId"": ""..."", ""name"": ""Player_Update"" }
+- analysis.symbols.xrefs
+  Purpose: Get callers/callees (call graph) for a function.
+  Args: { ""jobId"": ""..."", ""name"": ""Player_Update"", ""direction"": ""both"", ""limit"": 50 }
+- analysis.strings.search
+  Purpose: Search string literals and optionally return referencing functions.
+  Notes: includeRefs=true returns func refs for fast triage.
+  Args: { ""jobId"": ""..."", ""query"": ""weapon"", ""match"": ""contains"", ""includeRefs"": true, ""maxRefs"": 20 }
+- analysis.pseudocode.search
+  Purpose: Search pseudocode/disassembly text and return snippets.
+  Args: { ""jobId"": ""..."", ""query"": ""weaponId"", ""limit"": 10, ""snippetChars"": 300 }
+- analysis.pseudocode.get
+  Purpose: Fetch full pseudocode/disassembly for a function.
+  Args: { ""jobId"": ""..."", ""name"": ""Player_Update"", ""maxChars"": 4000 }
+
+7) Patch generation + packaging
+- patch_codegen
+  Purpose: Generate patch template + target shortlist from analysis artifacts.
+  Notes: Outputs patch_targets.json + PatchTargets.cs + Plugin.cs.
+  Args: { ""requirements"": ""..."", ""analysisArtifacts"": [""...""] }
+- package_mod
+  Purpose: Package output directory into zip with manifest/install/rollback.
+  Notes: Writes package zip into outputDir.
+  Args: { ""outputDir"": ""C:\\Kiln\\output"" }
+
+8) MCP resources (BepInEx docs)
 - List resources: resources/list
 - Read a resource: resources/read { ""uri"": ""bepinex://docs/il2cpp-guide"" }";
 	}
