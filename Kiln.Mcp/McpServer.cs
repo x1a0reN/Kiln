@@ -184,6 +184,8 @@ namespace Kiln.Mcp {
 				return HandleIl2CppDump(id, input);
 			if (tool.Method == "ida_analyze")
 				return HandleIdaAnalyze(id, input);
+			if (tool.Method == "ida_register_db")
+				return HandleIdaRegisterDb(id, input);
 			if (tool.Method == "ida_export_symbols")
 				return HandleIdaExportSymbols(id, input);
 			if (tool.Method == "ida_export_pseudocode")
@@ -498,6 +500,70 @@ namespace Kiln.Mcp {
 				["databasePath"] = expectedDb,
 			};
 			return ToolOk(id, payload);
+		}
+
+		JObject HandleIdaRegisterDb(JToken? id, JObject input) {
+			var gameDir = input["gameDir"]?.Value<string>();
+			var databasePath = input["databasePath"]?.Value<string>();
+			if (string.IsNullOrWhiteSpace(gameDir))
+				return ToolError(id, "Missing gameDir");
+			if (string.IsNullOrWhiteSpace(databasePath))
+				return ToolError(id, "Missing databasePath");
+
+			if (!File.Exists(databasePath))
+				return ToolError(id, $"databasePath not found: {databasePath}");
+
+			var ext = Path.GetExtension(databasePath);
+			if (!ext.Equals(".i64", StringComparison.OrdinalIgnoreCase) && !ext.Equals(".idb", StringComparison.OrdinalIgnoreCase))
+				return ToolError(id, "databasePath must be a .i64 or .idb file.");
+
+			var locate = UnityLocator.Locate(gameDir);
+			if (!locate.IsIl2Cpp || string.IsNullOrWhiteSpace(locate.GameAssemblyPath))
+				return ToolError(id, "Unity IL2CPP GameAssembly.dll not found.");
+
+			var dumpDir = config.GetIl2CppDumpDir(gameDir);
+			var scriptJson = Path.Combine(dumpDir, "script.json");
+			var il2cppHeader = Path.Combine(dumpDir, "il2cpp.h");
+			if (!File.Exists(scriptJson))
+				return ToolError(id, $"script.json not found in il2cpp dump dir: {scriptJson}");
+			if (!File.Exists(il2cppHeader))
+				return ToolError(id, $"il2cpp.h not found in il2cpp dump dir: {il2cppHeader}");
+
+			var idbDir = input["idbDir"]?.Value<string>();
+			if (string.IsNullOrWhiteSpace(idbDir))
+				idbDir = config.GetIdaOutputDirForGame(gameDir);
+			Directory.CreateDirectory(idbDir);
+
+			var copyToIdbDir = input["copyToIdbDir"]?.Value<bool?>() ?? true;
+			var overwrite = input["overwrite"]?.Value<bool?>() ?? false;
+
+			var expectedDb = GetExpectedDatabasePathForImport(idbDir, locate.GameAssemblyPath, databasePath);
+			var targetDb = databasePath;
+			var copied = false;
+
+			if (copyToIdbDir && !PathsEqual(databasePath, expectedDb)) {
+				if (File.Exists(expectedDb) && !overwrite)
+					return ToolError(id, $"Target DB already exists: {expectedDb} (set overwrite=true to replace).");
+				File.Copy(databasePath, expectedDb, overwrite);
+				targetDb = expectedDb;
+				copied = true;
+			}
+
+			TryWriteDbMeta(targetDb, locate, scriptJson, il2cppHeader);
+			var payload = new JObject {
+				["databasePath"] = targetDb,
+				["copied"] = copied,
+				["metaPath"] = GetDbMetaPath(targetDb),
+			};
+			return ToolOk(id, payload);
+		}
+
+		string GetExpectedDatabasePathForImport(string idbDir, string gameAssemblyPath, string sourceDatabasePath) {
+			var ext = Path.GetExtension(sourceDatabasePath);
+			var name = Path.GetFileNameWithoutExtension(gameAssemblyPath);
+			if (string.IsNullOrWhiteSpace(ext))
+				ext = ".i64";
+			return Path.Combine(idbDir, name + ext);
 		}
 
 		JObject HandleIdaExportSymbols(JToken? id, JObject input) {
@@ -1720,6 +1786,8 @@ Arguments: { ""jobId"": ""..."" }
   { ""gameDir"": ""C:\\Games\\Example"", ""dumperPath"": ""C:\\Kiln\\Il2CppDumper"" }
 - ida_analyze
   { ""gameDir"": ""C:\\Games\\Example"", ""idaPath"": ""C:\\Program Files\\IDA Professional 9.2\\idat64.exe"", ""reuseExisting"": true }
+- ida_register_db
+  { ""gameDir"": ""C:\\Games\\Example"", ""databasePath"": ""C:\\Tools\\GameAssembly.i64"", ""copyToIdbDir"": true, ""overwrite"": false }
 - ida_export_symbols
   { ""jobId"": ""..."" }
 - ida_export_pseudocode

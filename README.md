@@ -46,6 +46,7 @@ Optional logging:
 - `unity_locate`
 - `il2cpp_dump`
 - `ida_analyze`
+- `ida_register_db`
 - `ida_export_symbols`
 - `ida_export_pseudocode`
 - `analysis.index.build`
@@ -89,6 +90,12 @@ These tools operate on exported artifacts under `idaOutputDir` (default: `ida/`)
 ```
 
 Tip: if `idaOutputDir` already contains a matching `.i64/.idb`, `ida_analyze` can skip analysis by passing `reuseExisting: true`.
+
+If you have a pre-existing `.i64/.idb` from manual IDA work, register it first:
+```json
+{ "name": "ida_register_db", "arguments": { "gameDir": "<gameDir>", "databasePath": "D:\\Path\\GameAssembly.i64", "copyToIdbDir": true, "overwrite": false } }
+```
+Note: this validates `script.json` + `il2cpp.h` from the configured `il2cppRootDir` dump folder and writes a `.kiln.json` meta file next to the DB.
 
 ## MCP resources
 - List: `resources/list`

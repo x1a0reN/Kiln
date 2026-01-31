@@ -122,6 +122,22 @@ namespace Kiln.Mcp {
 					},
 					"ida_analyze"),
 				new ToolDef(
+					"ida_register_db",
+					"Register an existing IDA database (.i64/.idb) for reuse.",
+					new JObject {
+						["type"] = "object",
+						["properties"] = new JObject {
+							["gameDir"] = new JObject { ["type"] = "string" },
+							["databasePath"] = new JObject { ["type"] = "string" },
+							["idbDir"] = new JObject { ["type"] = "string", ["description"] = "Optional; override output directory for this game." },
+							["copyToIdbDir"] = new JObject { ["type"] = "boolean", ["description"] = "Optional; copy DB into idbDir (default true)." },
+							["overwrite"] = new JObject { ["type"] = "boolean", ["description"] = "Optional; overwrite existing DB (default false)." },
+						},
+						["required"] = new JArray("gameDir", "databasePath"),
+						["additionalProperties"] = false,
+					},
+					"ida_register_db"),
+				new ToolDef(
 					"ida_export_symbols",
 					"Export function list and signatures from IDA.",
 					new JObject {
