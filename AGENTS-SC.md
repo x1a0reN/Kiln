@@ -76,6 +76,15 @@
 - 2026-01-31：伪代码按需导出 + 自动补齐搜索/获取 + 可选后台全量导出。
 - 2026-01-31：patch_codegen 支持 jobId/gameDir/analysisDir 解析相对产物并自动回退分析目录。
 - 2026-01-31：patch_codegen 过滤泛词、加入伪代码命中评分，并生成 HarmonyX 无敌 Hook。
+- 2026-01-31：基于 Karate.Survivor 完成端到端闭环验证（复用 i64、导出符号、按需伪代码、生成 patch 模板）。
+
+## 关键理念
+- 关系数据以 symbols/strings 为主；伪代码按需导出并缓存，exportAll 可选且默认关闭。
+- 分析产物优先通过 jobId/gameDir/analysisDir 解析相对路径，避免依赖绝对路径。
+- HarmonyX 作为 IL2CPP 托管方法的默认补丁方案；原生地址 detour 为备选。
+- 目标命中是启发式结果，发布前需要人工收敛（避免误补生命周期方法）。
+- 使用任何工具前必须先读 kiln.exampleFlow（服务端强制）。
+
 ## 下一步
 - 实现 Phase 3：IDA headless 分析 + 符号/类型加载。
 - 实现 Phase 4：符号与伪代码导出。
