@@ -504,8 +504,51 @@ namespace Kiln.Plugins.Packaging {
 		}
 
 		static string EscapeCSharp(string value) {
-			var escaped = value.Replace("\\", "\\\\").Replace("\"", "\\\"");
-			return $"\"{escaped}\"";
+			var builder = new StringBuilder(value.Length + 8);
+			foreach (var ch in value) {
+				switch (ch) {
+					case '\\':
+						builder.Append("\\\\");
+						break;
+					case '"':
+						builder.Append("\\\"");
+						break;
+					case '\0':
+						builder.Append("\\0");
+						break;
+					case '\a':
+						builder.Append("\\a");
+						break;
+					case '\b':
+						builder.Append("\\b");
+						break;
+					case '\f':
+						builder.Append("\\f");
+						break;
+					case '\n':
+						builder.Append("\\n");
+						break;
+					case '\r':
+						builder.Append("\\r");
+						break;
+					case '\t':
+						builder.Append("\\t");
+						break;
+					case '\v':
+						builder.Append("\\v");
+						break;
+					default:
+						if (char.IsControl(ch)) {
+							builder.Append("\\u");
+							builder.Append(((int)ch).ToString("x4", System.Globalization.CultureInfo.InvariantCulture));
+						}
+						else {
+							builder.Append(ch);
+						}
+						break;
+				}
+			}
+			return $"\"{builder}\"";
 		}
 
 		static string FormatStringArray(IReadOnlyList<string> values) {
