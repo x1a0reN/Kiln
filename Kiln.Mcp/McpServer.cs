@@ -249,7 +249,7 @@ namespace Kiln.Mcp {
 			if (tool.Method == "analysis.pseudocode.ensure")
 				return HandleAnalysisPseudocodeEnsure(id, input);
 			if (tool.Method == "patch_codegen")
-				return HandlePatchCodegen(id, input);
+				return await HandlePatchCodegenAsync(id, input, token).ConfigureAwait(false);
 			if (tool.Method == "package_mod")
 				return HandlePackageMod(id, input);
 
@@ -1207,7 +1207,7 @@ namespace Kiln.Mcp {
 			return ToolOk(id, payload);
 		}
 
-		JObject HandlePatchCodegen(JToken? id, JObject input) {
+		async Task<JObject> HandlePatchCodegenAsync(JToken? id, JObject input, CancellationToken token) {
 			var requirements = input["requirements"]?.Value<string>();
 			if (string.IsNullOrWhiteSpace(requirements))
 				return ToolError(id, "Missing requirements");
@@ -1217,6 +1217,7 @@ namespace Kiln.Mcp {
 			var emitPluginProject = input["emitPluginProject"]?.Value<bool?>() ?? true;
 			var projectName = input["projectName"]?.Value<string>();
 			var pluginGuid = input["pluginGuid"]?.Value<string>();
+			var analysisMode = input["analysisMode"]?.Value<string>() ?? "auto";
 			var analysisDir = input["analysisDir"]?.Value<string>();
 			if (string.IsNullOrWhiteSpace(analysisDir)) {
 				if (!string.IsNullOrWhiteSpace(jobId))
@@ -1227,19 +1228,33 @@ namespace Kiln.Mcp {
 					analysisDir = config.IdaOutputDir;
 			}
 
-			var artifactsToken = input["analysisArtifacts"] as JArray;
-			var artifacts = new List<string>();
-			if (artifactsToken is not null) {
-				foreach (var token in artifactsToken) {
-					var value = token?.Value<string>();
-					if (!string.IsNullOrWhiteSpace(value))
-						artifacts.Add(value);
+			var outputDir = Path.Combine(config.WorkspaceRoot, "patches", DateTime.UtcNow.ToString("yyyyMMdd_HHmmss"));
+			List<string> resolvedArtifacts;
+			var useLive = ShouldUseLiveAnalysis(analysisMode);
+			if (!useLive && analysisMode.Equals("live", StringComparison.OrdinalIgnoreCase))
+				return ToolError(id, "analysisMode=live requires ida-pro-mcp proxy to be enabled.");
+			if (useLive) {
+				try {
+					resolvedArtifacts = await BuildLiveArtifactsAsync(requirements, input, outputDir, token).ConfigureAwait(false);
+				}
+				catch (Exception ex) {
+					return ToolError(id, $"patch_codegen live analysis failed: {ex.Message}");
 				}
 			}
+			else {
+				var artifactsToken = input["analysisArtifacts"] as JArray;
+				var artifacts = new List<string>();
+				if (artifactsToken is not null) {
+					foreach (var item in artifactsToken) {
+						var value = item?.Value<string>();
+						if (!string.IsNullOrWhiteSpace(value))
+							artifacts.Add(value);
+					}
+				}
 
-			var resolvedArtifacts = ResolveAnalysisArtifacts(analysisDir, artifacts);
+				resolvedArtifacts = ResolveAnalysisArtifacts(analysisDir, artifacts);
+			}
 
-			var outputDir = Path.Combine(config.WorkspaceRoot, "patches", DateTime.UtcNow.ToString("yyyyMMdd_HHmmss"));
 			PatchCodegenResult result;
 			try {
 				result = PatchCodegenRunner.Run(requirements, resolvedArtifacts, outputDir);
@@ -1269,7 +1284,10 @@ namespace Kiln.Mcp {
 			var payload = new JObject {
 				["outputDir"] = result.OutputDir,
 				["files"] = new JArray(result.Files),
+				["analysisMode"] = useLive ? "live" : "offline",
 			};
+			if (useLive)
+				payload["liveArtifacts"] = new JArray(resolvedArtifacts);
 			if (pluginProject is not null) {
 				payload["pluginProjectEmitted"] = pluginProject.Success;
 				if (!string.IsNullOrWhiteSpace(pluginProject.ProjectDir))
@@ -1306,6 +1324,325 @@ namespace Kiln.Mcp {
 				["payloadFiles"] = new JArray(result.PayloadFiles),
 			};
 			return ToolOk(id, payload);
+		}
+
+		bool ShouldUseLiveAnalysis(string mode) {
+			if (mode.Equals("offline", StringComparison.OrdinalIgnoreCase))
+				return false;
+			if (idaProxy is null || !idaProxy.Enabled)
+				return false;
+			return true;
+		}
+
+		async Task<List<string>> BuildLiveArtifactsAsync(string requirements, JObject input, string outputDir, CancellationToken token) {
+			if (idaProxy is null || !idaProxy.Enabled)
+				throw new InvalidOperationException("ida-pro-mcp proxy is disabled.");
+
+			Directory.CreateDirectory(outputDir);
+
+			var keywords = ExtractKeywords(requirements);
+			var maxFunctions = Math.Clamp(input["liveMaxFunctions"]?.Value<int?>() ?? 200, 10, 5000);
+			var maxDecompile = Math.Clamp(input["liveMaxDecompile"]?.Value<int?>() ?? 40, 0, 200);
+			var maxStringMatches = Math.Clamp(input["liveMaxStringMatches"]?.Value<int?>() ?? 100, 0, 10000);
+			var maxStringXrefs = Math.Clamp(input["liveMaxStringXrefs"]?.Value<int?>() ?? 200, 0, 1000);
+
+			var functions = new Dictionary<string, LiveFunctionInfo>(StringComparer.OrdinalIgnoreCase);
+			var stringHits = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+
+			void AddFunction(string? ea, string? name, long size, int scoreBoost) {
+				var normEa = NormalizeEa(ea);
+				if (string.IsNullOrWhiteSpace(normEa))
+					return;
+				if (!functions.TryGetValue(normEa, out var info)) {
+					info = new LiveFunctionInfo {
+						Ea = normEa,
+						Name = name ?? string.Empty,
+						Size = size,
+					};
+					functions[normEa] = info;
+				}
+				else {
+					if (string.IsNullOrWhiteSpace(info.Name) || info.Name.StartsWith("sub_", StringComparison.OrdinalIgnoreCase)) {
+						if (!string.IsNullOrWhiteSpace(name))
+							info.Name = name!;
+					}
+					if (size > info.Size)
+						info.Size = size;
+				}
+				info.Score += scoreBoost;
+			}
+
+			void AddStringHit(string? funcEa, string? funcName, string keyword) {
+				if (string.IsNullOrWhiteSpace(keyword))
+					return;
+				AddFunction(funcEa, funcName, 0, 1);
+				var normEa = NormalizeEa(funcEa);
+				if (string.IsNullOrWhiteSpace(normEa))
+					return;
+				if (!stringHits.TryGetValue(normEa, out var set)) {
+					set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+					stringHits[normEa] = set;
+				}
+				set.Add(keyword);
+			}
+
+			async Task AddFunctionsFromListAsync(string filter, int scoreBoost) {
+				var args = new JObject {
+					["offset"] = 0,
+					["count"] = Math.Min(200, maxFunctions),
+					["filter"] = filter,
+				};
+				var result = await CallIdaToolStructuredAsync("ida.list_funcs", args, token).ConfigureAwait(false);
+				if (result is not JArray pages)
+					return;
+				foreach (var page in pages.OfType<JObject>()) {
+					if (page["data"] is not JArray data)
+						continue;
+					foreach (var func in data.OfType<JObject>()) {
+						var addr = func["addr"]?.Value<string>();
+						var name = func["name"]?.Value<string>();
+						var size = ParseSize(func["size"]?.Value<string>());
+						AddFunction(addr, name, size, scoreBoost);
+						if (functions.Count >= maxFunctions)
+							return;
+					}
+				}
+			}
+
+			if (keywords.Count == 0) {
+				await AddFunctionsFromListAsync("*", 1).ConfigureAwait(false);
+			}
+			else {
+				foreach (var keyword in keywords) {
+					await AddFunctionsFromListAsync(keyword, 3).ConfigureAwait(false);
+					if (functions.Count >= maxFunctions)
+						break;
+				}
+			}
+
+			if (keywords.Count > 0 && maxStringMatches > 0 && maxStringXrefs > 0) {
+				foreach (var keyword in keywords) {
+					var findArgs = new JObject {
+						["type"] = "string",
+						["targets"] = keyword,
+						["limit"] = maxStringMatches,
+						["offset"] = 0,
+					};
+					var findResult = await CallIdaToolStructuredAsync("ida.find", findArgs, token).ConfigureAwait(false);
+					if (findResult is not JArray findList)
+						continue;
+
+					var matches = new List<string>();
+					foreach (var entry in findList.OfType<JObject>()) {
+						if (entry["matches"] is not JArray found)
+							continue;
+						foreach (var match in found) {
+							var addr = match?.Value<string>();
+							if (string.IsNullOrWhiteSpace(addr))
+								continue;
+							matches.Add(addr);
+							if (matches.Count >= maxStringMatches)
+								break;
+						}
+						if (matches.Count >= maxStringMatches)
+							break;
+					}
+
+					if (matches.Count == 0)
+						continue;
+
+					var xrefsArgs = new JObject {
+						["addrs"] = new JArray(matches),
+						["limit"] = maxStringXrefs,
+					};
+					var xrefsResult = await CallIdaToolStructuredAsync("ida.xrefs_to", xrefsArgs, token).ConfigureAwait(false);
+					if (xrefsResult is not JArray xrefsList)
+						continue;
+
+					foreach (var entry in xrefsList.OfType<JObject>()) {
+						if (entry["xrefs"] is not JArray xrefs)
+							continue;
+						foreach (var xref in xrefs.OfType<JObject>()) {
+							var fn = xref["fn"] as JObject;
+							if (fn is null)
+								continue;
+							var addr = fn["addr"]?.Value<string>();
+							var name = fn["name"]?.Value<string>();
+							var size = ParseSize(fn["size"]?.Value<string>());
+							AddFunction(addr, name, size, 1);
+							AddStringHit(addr, name, keyword);
+						}
+					}
+				}
+			}
+
+			var ordered = functions.Values
+				.OrderByDescending(f => f.Score)
+				.ThenByDescending(f => f.Size)
+				.ThenBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
+				.Take(maxFunctions)
+				.ToList();
+
+			var symbolsArray = new JArray();
+			foreach (var func in ordered) {
+				var name = string.IsNullOrWhiteSpace(func.Name) ? $"sub_{func.Ea.Trim().Replace("0x", string.Empty)}" : func.Name;
+				symbolsArray.Add(new JObject {
+					["name"] = name,
+					["nameLower"] = name.ToLowerInvariant(),
+					["ea"] = func.Ea,
+					["endEa"] = null,
+					["size"] = func.Size,
+					["signature"] = null,
+					["signatureLower"] = null,
+					["calls"] = new JArray(),
+					["callers"] = new JArray(),
+				});
+			}
+
+			var stringEntries = new Dictionary<string, List<JObject>>(StringComparer.OrdinalIgnoreCase);
+			foreach (var hit in stringHits) {
+				var funcEa = hit.Key;
+				functions.TryGetValue(funcEa, out var funcInfo);
+				foreach (var value in hit.Value) {
+					if (!stringEntries.TryGetValue(value, out var refs)) {
+						refs = new List<JObject>();
+						stringEntries[value] = refs;
+					}
+					refs.Add(new JObject {
+						["funcEa"] = funcEa,
+						["funcName"] = funcInfo?.Name,
+						["refEa"] = null,
+					});
+				}
+			}
+
+			var stringsArray = new JArray();
+			foreach (var entry in stringEntries.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase)) {
+				var value = entry.Key;
+				stringsArray.Add(new JObject {
+					["ea"] = string.Empty,
+					["value"] = value,
+					["valueLower"] = value.ToLowerInvariant(),
+					["length"] = value.Length,
+					["refs"] = new JArray(entry.Value),
+				});
+			}
+
+			var pseudocodeArray = new JArray();
+			if (maxDecompile > 0) {
+				foreach (var func in ordered.Take(maxDecompile)) {
+					var decompileArgs = new JObject {
+						["addr"] = func.Ea,
+					};
+					var decompileResult = await CallIdaToolStructuredAsync("ida.decompile", decompileArgs, token).ConfigureAwait(false);
+					var code = decompileResult?["code"]?.Value<string>();
+					if (string.IsNullOrWhiteSpace(code))
+						continue;
+					var name = string.IsNullOrWhiteSpace(func.Name) ? $"sub_{func.Ea.Trim().Replace("0x", string.Empty)}" : func.Name;
+					pseudocodeArray.Add(new JObject {
+						["name"] = name,
+						["ea"] = func.Ea,
+						["pseudocode"] = code,
+					});
+				}
+			}
+
+			var symbolsPath = Path.Combine(outputDir, "live_symbols.json");
+			var stringsPath = Path.Combine(outputDir, "live_strings.json");
+			var pseudocodePath = Path.Combine(outputDir, "live_pseudocode.json");
+
+			File.WriteAllText(symbolsPath, new JObject {
+				["symbols"] = symbolsArray,
+				["count"] = symbolsArray.Count,
+			}.ToString(Formatting.Indented));
+
+			File.WriteAllText(stringsPath, new JObject {
+				["strings"] = stringsArray,
+				["count"] = stringsArray.Count,
+			}.ToString(Formatting.Indented));
+
+			File.WriteAllText(pseudocodePath, new JObject {
+				["functions"] = pseudocodeArray,
+				["count"] = pseudocodeArray.Count,
+			}.ToString(Formatting.Indented));
+
+			return new List<string> { symbolsPath, stringsPath, pseudocodePath };
+		}
+
+		async Task<JToken?> CallIdaToolStructuredAsync(string toolName, JObject args, CancellationToken token) {
+			if (idaProxy is null || !idaProxy.Enabled)
+				throw new InvalidOperationException("ida-pro-mcp proxy is disabled.");
+
+			var result = await idaProxy.CallToolAsync(toolName, args, token).ConfigureAwait(false);
+			if (result["isError"]?.Value<bool>() == true) {
+				var errorText = result["content"]?.First?["text"]?.Value<string>() ?? "ida-pro-mcp call failed.";
+				throw new InvalidOperationException(errorText);
+			}
+
+			var structured = result["structuredContent"];
+			if (structured is JObject structuredObj) {
+				if (structuredObj.TryGetValue("result", out var inner) && structuredObj.Count == 1)
+					return inner;
+				return structuredObj;
+			}
+			if (structured is not null)
+				return structured;
+
+			var text = result["content"]?.First?["text"]?.Value<string>();
+			if (!string.IsNullOrWhiteSpace(text)) {
+				try {
+					return JToken.Parse(text);
+				}
+				catch {
+				}
+			}
+			return null;
+		}
+
+		static List<string> ExtractKeywords(string requirements) {
+			var list = new List<string>();
+			var buffer = new StringBuilder();
+			foreach (var ch in requirements) {
+				if (char.IsLetterOrDigit(ch) || ch == '_') {
+					buffer.Append(ch);
+					continue;
+				}
+
+				FlushToken(buffer, list);
+			}
+			FlushToken(buffer, list);
+			var stopwords = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
+				"mod", "mods", "hook", "hooks", "plugin", "plugins", "template", "templates",
+				"patch", "patches", "kiln", "generate", "generated", "make", "create",
+				"example", "samples", "demo", "test",
+			};
+			var allow = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "hp" };
+			return list
+				.Select(x => x.ToLowerInvariant())
+				.Where(x => (x.Length >= 3 || allow.Contains(x)) && !stopwords.Contains(x))
+				.Distinct(StringComparer.OrdinalIgnoreCase)
+				.Take(24)
+				.ToList();
+		}
+
+		static void FlushToken(StringBuilder buffer, List<string> list) {
+			if (buffer.Length == 0)
+				return;
+			list.Add(buffer.ToString());
+			buffer.Clear();
+		}
+
+		static long ParseSize(string? value) {
+			if (string.IsNullOrWhiteSpace(value))
+				return 0;
+			var text = value.Trim();
+			if (text.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+				text = text[2..];
+			if (long.TryParse(text, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var hex))
+				return hex;
+			if (long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var dec))
+				return dec;
+			return 0;
 		}
 
 		static List<string> ReadStringArray(JToken? token) {
@@ -2522,6 +2859,13 @@ Notes:
 - Use resources/list and resources/read to load embedded docs (e.g. BepInEx).
 - ida.* tools are proxied from ida-pro-mcp when enabled in kiln.config.json.";
 
+		sealed class LiveFunctionInfo {
+			public string Ea { get; set; } = string.Empty;
+			public string Name { get; set; } = string.Empty;
+			public long Size { get; set; }
+			public int Score { get; set; }
+		}
+
 		sealed class PluginProjectResult {
 			public bool Success { get; set; }
 			public string ProjectDir { get; set; } = string.Empty;
@@ -2775,6 +3119,12 @@ detect_engine -> unity_locate -> il2cpp_dump (or manual dump) -> ida_analyze (or
 -> ida_export_symbols -> ida_export_pseudocode -> analysis.index.build -> analysis.* search
 -> patch_codegen -> package_mod
 
+Recommended live order (ida-pro-mcp):
+ida.list_funcs -> ida.find -> ida.xrefs_to -> ida.decompile -> patch_codegen (analysisMode=live)
+Notes:
+- Live mode uses ida-pro-mcp tools and does not require offline exports.
+- Offline exports remain available for large or repeatable analysis runs.
+
 1) workflow.run (optional high-level flow)
 Purpose: Run a predefined workflow (currently Unity IL2CPP pipeline).
 Best practices:
@@ -2993,7 +3343,8 @@ Common errors:
 - Empty artifacts => empty target list.
 Recommended order:
 - After analysis search identifies targets.
-Args: { ""jobId"": ""..."", ""requirements"": ""..."", ""analysisArtifacts"": [""symbols.json"", ""strings.json"", ""pseudocode.json""], ""emitPluginProject"": true }
+Args (offline): { ""jobId"": ""..."", ""requirements"": ""..."", ""analysisArtifacts"": [""symbols.json"", ""strings.json"", ""pseudocode.json""], ""emitPluginProject"": true }
+Args (live): { ""requirements"": ""..."", ""analysisMode"": ""live"", ""liveMaxFunctions"": 200, ""liveMaxDecompile"": 40, ""emitPluginProject"": true }
 
 21) package_mod
 Purpose: Package output directory into zip with manifest/install/rollback.

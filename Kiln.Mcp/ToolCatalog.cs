@@ -315,7 +315,7 @@ namespace Kiln.Mcp {
 					"analysis.pseudocode.ensure"),
 				new ToolDef(
 					"patch_codegen",
-					"Generate mod/plugin template from requirements and analysis artifacts.",
+					"Generate mod/plugin template from requirements and analysis artifacts (offline) or live ida-pro-mcp queries.",
 					new JObject {
 						["type"] = "object",
 						["properties"] = new JObject {
@@ -323,9 +323,14 @@ namespace Kiln.Mcp {
 							["gameDir"] = new JObject { ["type"] = "string", ["description"] = "Optional; resolve artifacts from idaOutputDir/<game-name>." },
 							["analysisDir"] = new JObject { ["type"] = "string", ["description"] = "Optional; resolve artifacts relative to this analysis directory." },
 							["requirements"] = new JObject { ["type"] = "string" },
+							["analysisMode"] = new JObject { ["type"] = "string", ["description"] = "Optional; live|offline|auto (default auto uses ida-pro-mcp when enabled)." },
 							["emitPluginProject"] = new JObject { ["type"] = "boolean", ["description"] = "Optional; auto-generate per-game plugin project under modsRoot (default true)." },
 							["projectName"] = new JObject { ["type"] = "string", ["description"] = "Optional; override generated plugin project name." },
 							["pluginGuid"] = new JObject { ["type"] = "string", ["description"] = "Optional; override BepInEx plugin GUID." },
+							["liveMaxFunctions"] = new JObject { ["type"] = "integer", ["description"] = "Optional; max live functions to consider (default 200)." },
+							["liveMaxDecompile"] = new JObject { ["type"] = "integer", ["description"] = "Optional; max live functions to decompile (default 40)." },
+							["liveMaxStringMatches"] = new JObject { ["type"] = "integer", ["description"] = "Optional; max string matches per keyword (default 100)." },
+							["liveMaxStringXrefs"] = new JObject { ["type"] = "integer", ["description"] = "Optional; max xrefs per string match (default 200)." },
 							["analysisArtifacts"] = new JObject {
 								["type"] = "array",
 								["items"] = new JObject { ["type"] = "string" },

@@ -4,7 +4,7 @@
   "idaOutputDir": "ida",
   "workspaceRoot": "workspace",
   "modsRoot": "mods",
-  "idaMcpEnabled": false,
+  "idaMcpEnabled": true,
   "idaMcpCommand": "ida-pro-mcp",
   "idaMcpArgs": [
     "--transport",

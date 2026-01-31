@@ -116,9 +116,28 @@ namespace Kiln.Mcp {
 					continue;
 				var description = entry["description"]?.Value<string>() ?? string.Empty;
 				var schema = entry["inputSchema"] as JObject ?? new JObject();
-				tools.Add(new IdaMcpProxyTool(name, description, (JObject)schema.DeepClone()));
+				var normalized = NormalizeSchema(schema);
+				tools.Add(new IdaMcpProxyTool(name, description, normalized));
 			}
 			return tools;
+		}
+
+		static JObject NormalizeSchema(JObject schema) {
+			var normalized = (JObject)schema.DeepClone();
+			var type = normalized["type"]?.Value<string>();
+			if (string.IsNullOrWhiteSpace(type))
+				normalized["type"] = "object";
+
+			if (normalized["properties"] is not JObject)
+				normalized["properties"] = new JObject();
+
+			if (normalized["required"] is not null && normalized["required"]?.Type != JTokenType.Array)
+				normalized["required"] = new JArray();
+
+			if (normalized["additionalProperties"] is null)
+				normalized["additionalProperties"] = true;
+
+			return normalized;
 		}
 
 		static JObject BuildErrorResult(string message) {
