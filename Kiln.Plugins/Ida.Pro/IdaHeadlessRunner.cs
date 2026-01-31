@@ -30,30 +30,24 @@ namespace Kiln.Plugins.Ida.Pro {
 
 			var args = new List<string> {
 				"-A",
-				$"-L\"{logPath}\"",
+				$"-L{QuoteForCommandLine(logPath)}",
 			};
 			if (!isDatabase)
-				args.Add($"-o\"{dbPath}\"");
+				args.Add($"-o{QuoteForCommandLine(dbPath)}");
 
-			if (!string.IsNullOrWhiteSpace(scriptPath)) {
-				args.Add($"-S{scriptPath}");
-				if (scriptArgs is not null) {
-					foreach (var arg in scriptArgs)
-						args.Add(arg);
-				}
-			}
+			if (!string.IsNullOrWhiteSpace(scriptPath))
+				args.Add($"-S{BuildScriptInvocation(scriptPath, scriptArgs)}");
 
-			args.Add($"\"{inputBinaryPath}\"");
+			args.Add(QuoteForCommandLine(inputBinaryPath));
 
 			var psi = new ProcessStartInfo {
 				FileName = idaPath,
+				Arguments = string.Join(" ", args),
 				UseShellExecute = false,
 				RedirectStandardOutput = true,
 				RedirectStandardError = true,
 				CreateNoWindow = true,
 			};
-			foreach (var arg in args)
-				psi.ArgumentList.Add(arg);
 
 			using var process = new Process { StartInfo = psi };
 			if (!process.Start())
@@ -168,6 +162,22 @@ namespace Kiln.Plugins.Ida.Pro {
 			return fileName;
 		}
 
-		// Script args are passed as separate CLI args to IDA (after -S<script>).
+		static string BuildScriptInvocation(string scriptPath, IReadOnlyList<string>? scriptArgs) {
+			var parts = new List<string> { QuoteForCommandLine(scriptPath) };
+			if (scriptArgs is not null) {
+				foreach (var arg in scriptArgs)
+					parts.Add(QuoteForCommandLine(arg));
+			}
+			return string.Join(" ", parts);
+		}
+
+		static string QuoteForCommandLine(string value) {
+			if (string.IsNullOrEmpty(value))
+				return "\"\"";
+			var escaped = value.Replace("\"", "\\\"");
+			if (escaped.IndexOfAny(new[] { ' ', '\t' }) >= 0)
+				return $"\"{escaped}\"";
+			return escaped;
+		}
 	}
 }
