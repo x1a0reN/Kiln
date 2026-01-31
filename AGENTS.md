@@ -75,6 +75,7 @@
 - 2026-01-31: IDA export fix — clean stale unpacked DB files before headless export to avoid lock prompts.
 - 2026-01-31: Analysis pseudocode on-demand export + auto-export search/get + optional background full export.
 - 2026-01-31: patch_codegen resolves relative artifacts via jobId/gameDir/analysisDir and auto-falls back to analysis outputs.
+- 2026-01-31: patch_codegen now filters generic keywords, scores pseudocode hits, and emits HarmonyX invincibility hooks.
 ## Next Steps
 - Implement Phase 3: IDA headless analysis + symbol/typing load.
 - Implement Phase 4: symbol and pseudocode export.
