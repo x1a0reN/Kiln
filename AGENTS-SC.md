@@ -129,3 +129,4 @@ dotnet run --project Kiln.Mcp -c Release
 - 2026-01-31：ida-pro-mcp 自动启动强制使用 idat（headless），仅有 GUI IDA 时直接报错并拒绝启动。
 - 2026-01-31：headless ida-pro-mcp 自动启动增加 -A，避免弹窗阻塞。
 - 2026-01-31：live patch_codegen 在字符串检索/交叉引用超时后会回退到 ida.list_funcs。
+- 2026-01-31：live patch_codegen 在调用 ida.* 之前会先自动拉起 IDA，避免连接竞态。

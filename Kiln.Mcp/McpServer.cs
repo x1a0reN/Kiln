@@ -1344,6 +1344,8 @@ namespace Kiln.Mcp {
 			var databasePath = input["databasePath"]?.Value<string>();
 			var autoStartIda = input["autoStartIda"]?.Value<bool?>();
 			var allowAutoStart = autoStartIda ?? config.IdaMcpAutoStart;
+			if (allowAutoStart)
+				await idaProxy.TryAutoStartAsync(databasePath, token).ConfigureAwait(false);
 
 			var keywords = ExtractKeywords(requirements);
 			if (keywords.Count == 0) {

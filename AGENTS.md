@@ -89,6 +89,7 @@
 - 2026-01-31: Enforced headless idat launch for ida-pro-mcp auto-start and fail fast when only GUI IDA is available.
 - 2026-01-31: Headless ida-pro-mcp auto-start now uses -A to suppress dialogs/prompts.
 - 2026-01-31: Live patch_codegen now falls back to ida.list_funcs and tolerates string search/xref timeouts.
+- 2026-01-31: Live patch_codegen now auto-starts IDA before ida.* calls to avoid connection races.
 
 ## Key Principles
 - Full relationships come from symbols/strings; pseudocode is on-demand with cache, exportAll is optional (default off).
