@@ -2603,7 +2603,6 @@ Notes:
 				"using BepInEx;",
 				"using BepInEx.Unity.IL2CPP;",
 				"using BepInEx.Logging;",
-				"using HarmonyLib;",
 				"",
 				$"namespace {ns}",
 				"{",
@@ -2616,8 +2615,7 @@ Notes:
 				"\t\t{",
 				"\t\t\tLog = base.Log;",
 				"\t\t\tLog.LogInfo(\"Plugin loaded.\");",
-				"\t\t\tvar harmony = new Harmony(\"" + guid + "\");",
-				"\t\t\tharmony.PatchAll();",
+				"\t\t\t// TODO: call game SDK APIs here (prefer direct calls over patching).",
 				"\t\t}",
 				"\t}",
 				"}",
@@ -2629,7 +2627,6 @@ Notes:
 			return string.Join(Environment.NewLine, new[] {
 				"using BepInEx;",
 				"using BepInEx.Logging;",
-				"using HarmonyLib;",
 				"",
 				$"namespace {ns}",
 				"{",
@@ -2642,8 +2639,7 @@ Notes:
 				"\t\t{",
 				"\t\t\tLog = Logger;",
 				"\t\t\tLog.LogInfo(\"Plugin loaded.\");",
-				"\t\t\tvar harmony = new Harmony(\"" + guid + "\");",
-				"\t\t\tharmony.PatchAll();",
+				"\t\t\t// TODO: call game SDK APIs here (prefer direct calls over patching).",
 				"\t\t}",
 				"\t}",
 				"}",
@@ -2951,7 +2947,7 @@ Recommended order:
 Args: { ""jobId"": ""..."", ""names"": [""Player_Update""], ""exportAll"": false, ""async"": true }
 
 20) patch_codegen
-Purpose: Generate patch template + target shortlist from analysis artifacts.
+Purpose: Generate mod/plugin template + target shortlist from analysis artifacts.
 Best practices:
 - Pass symbols/pseudocode/strings indexes for best results.
 - You can pass jobId/gameDir/analysisDir and list filenames only; Kiln will resolve them.

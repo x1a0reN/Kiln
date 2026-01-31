@@ -315,7 +315,7 @@ namespace Kiln.Mcp {
 					"analysis.pseudocode.ensure"),
 				new ToolDef(
 					"patch_codegen",
-					"Generate patch/plugin template from requirements and analysis artifacts.",
+					"Generate mod/plugin template from requirements and analysis artifacts.",
 					new JObject {
 						["type"] = "object",
 						["properties"] = new JObject {

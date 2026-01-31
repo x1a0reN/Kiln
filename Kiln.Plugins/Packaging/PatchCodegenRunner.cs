@@ -42,11 +42,11 @@ namespace Kiln.Plugins.Packaging {
 			File.WriteAllText(summaryPath, JsonSerializer.Serialize(analysis.Summary, jsonOptions));
 			files.Add(summaryPath);
 
-			var targetsPath = Path.Combine(outputDir, "patch_targets.json");
+			var targetsPath = Path.Combine(outputDir, "mod_targets.json");
 			File.WriteAllText(targetsPath, JsonSerializer.Serialize(analysis.Targets, jsonOptions));
 			files.Add(targetsPath);
 
-			var targetsSourcePath = Path.Combine(srcDir, "PatchTargets.cs");
+			var targetsSourcePath = Path.Combine(srcDir, "ModTargets.cs");
 			File.WriteAllText(targetsSourcePath, BuildPatchTargetsSource(analysis.Targets));
 			files.Add(targetsSourcePath);
 
@@ -485,7 +485,7 @@ namespace Kiln.Plugins.Packaging {
 
 		static string BuildReadme(string requirements, IReadOnlyList<string> artifacts, PatchAnalysis analysis) {
 			var writer = new StringWriter();
-			writer.WriteLine("# Kiln Patch Template");
+			writer.WriteLine("# Kiln Mod Template");
 			writer.WriteLine();
 			writer.WriteLine("## Requirements");
 			writer.WriteLine(requirements.Trim());
@@ -508,12 +508,12 @@ namespace Kiln.Plugins.Packaging {
 			writer.WriteLine();
 			writer.WriteLine("Generated files:");
 			writer.WriteLine("- analysis_summary.json");
-			writer.WriteLine("- patch_targets.json");
-			writer.WriteLine("- src/PatchTargets.cs");
+			writer.WriteLine("- mod_targets.json");
+			writer.WriteLine("- src/ModTargets.cs");
 			writer.WriteLine();
 			writer.WriteLine("## Next Steps");
-			writer.WriteLine("- Review patch_targets.json to pick candidate hooks.");
-			writer.WriteLine("- Implement hook logic in src/Plugin.cs (Harmony for managed, native detour for addresses).");
+			writer.WriteLine("- Review mod_targets.json to pick candidate SDK entrypoints.");
+			writer.WriteLine("- Implement mod logic in src/Plugin.cs (call game SDK; use Harmony only when needed).");
 			writer.WriteLine("- Build and package with package_mod");
 			return writer.ToString();
 		}
@@ -522,8 +522,8 @@ namespace Kiln.Plugins.Packaging {
 			var builder = new StringBuilder();
 			builder.AppendLine("using System;");
 			builder.AppendLine();
-			builder.AppendLine("namespace Kiln.Patches {");
-			builder.AppendLine("\tpublic sealed class PatchTarget {");
+			builder.AppendLine("namespace Kiln.Mods {");
+			builder.AppendLine("\tpublic sealed class ModTarget {");
 			builder.AppendLine("\t\tpublic string Name { get; }");
 			builder.AppendLine("\t\tpublic string Ea { get; }");
 			builder.AppendLine("\t\tpublic string? EndEa { get; }");
@@ -535,7 +535,7 @@ namespace Kiln.Plugins.Packaging {
 			builder.AppendLine("\t\tpublic string[] Calls { get; }");
 			builder.AppendLine("\t\tpublic string[] Callers { get; }");
 			builder.AppendLine();
-			builder.AppendLine("\t\tpublic PatchTarget(string name, string ea, string? endEa, long size, string? signature, int score, string[] reasons, string[] strings, string[] calls, string[] callers) {");
+			builder.AppendLine("\t\tpublic ModTarget(string name, string ea, string? endEa, long size, string? signature, int score, string[] reasons, string[] strings, string[] calls, string[] callers) {");
 			builder.AppendLine("\t\t\tName = name;");
 			builder.AppendLine("\t\t\tEa = ea;");
 			builder.AppendLine("\t\t\tEndEa = endEa;");
@@ -549,11 +549,11 @@ namespace Kiln.Plugins.Packaging {
 			builder.AppendLine("\t\t}");
 			builder.AppendLine("\t}");
 			builder.AppendLine();
-			builder.AppendLine("\tpublic static class PatchTargets {");
-			builder.AppendLine("\t\tpublic static readonly PatchTarget[] Targets = new PatchTarget[] {");
+			builder.AppendLine("\tpublic static class ModTargets {");
+			builder.AppendLine("\t\tpublic static readonly ModTarget[] Targets = new ModTarget[] {");
 
 			foreach (var target in targets) {
-				builder.Append("\t\t\tnew PatchTarget(");
+				builder.Append("\t\t\tnew ModTarget(");
 				builder.Append(EscapeCSharp(target.Name));
 				builder.Append(", ");
 				builder.Append(EscapeCSharp(target.Ea));
@@ -639,113 +639,35 @@ namespace Kiln.Plugins.Packaging {
 
 		const string PluginTemplate =
 @"using System;
-using System.Linq;
-using System.Reflection;
 using BepInEx;
 using BepInEx.Unity.IL2CPP;
 using BepInEx.Logging;
-using HarmonyLib;
+using UnityEngine;
+using UnityEngine.SceneManagement;
 
-namespace Kiln.Patches {
-	[BepInPlugin(""com.kiln.patch"", ""KilnPatch"", ""0.1.0"")]
+namespace Kiln.Mods {
+	[BepInPlugin(""com.kiln.mod"", ""KilnMod"", ""0.1.0"")]
 	public sealed class Plugin : BasePlugin {
 		public static ManualLogSource LoggerInstance = null!;
-		static readonly string[] DamageKeywords = { ""damage"", ""hurt"", ""health"", ""hp"" };
-		Harmony? _harmony;
 
 		public override void Load() {
 			LoggerInstance = Log;
-			_harmony = new Harmony(""com.kiln.patch""); // HarmonyX (BepInEx IL2CPP)
-			Log.LogInfo($""Kiln patch loaded. Targets: {PatchTargets.Targets.Length}."");
+			Log.LogInfo($""Kiln mod loaded. Targets: {ModTargets.Targets.Length}."");
 
-			var candidates = PatchTargets.Targets
-				.Where(t => MatchKeywords(t, DamageKeywords))
-				.OrderByDescending(t => t.Score)
-				.Take(8)
-				.ToArray();
+			// Prefer calling game SDK APIs over patching when possible.
+			SceneManager.sceneLoaded += OnSceneLoaded;
+		}
 
-			if (candidates.Length == 0) {
-				Log.LogWarning(""No damage-related targets found; review patch_targets.json."");
+		static void OnSceneLoaded(Scene scene, LoadSceneMode mode) {
+			LoggerInstance.LogInfo($""Scene loaded: {scene.name}"");
+
+			// TODO: replace with actual game SDK entrypoints.
+			// Example: find player and call a public method on its component.
+			var player = GameObject.FindWithTag(""Player"");
+			if (player == null)
 				return;
-			}
 
-			foreach (var target in candidates) {
-				var method = ResolveMethod(target.Name);
-				if (method is null) {
-					Log.LogWarning($""Resolve failed: {target.Name} ({target.Ea})"");
-					continue;
-				}
-
-				_harmony.Patch(method, prefix: new HarmonyMethod(typeof(Patches), nameof(Patches.BlockDamagePrefix)));
-				Log.LogInfo($""Patched: {target.Name} ({target.Ea})"");
-			}
-		}
-
-		static bool MatchKeywords(PatchTarget target, string[] keywords) {
-			foreach (var keyword in keywords) {
-				if (Contains(target.Name, keyword) || Contains(target.Signature, keyword))
-					return true;
-				foreach (var reason in target.Reasons) {
-					if (Contains(reason, keyword))
-						return true;
-				}
-				foreach (var str in target.Strings) {
-					if (Contains(str, keyword))
-						return true;
-				}
-			}
-			return false;
-		}
-
-		static bool Contains(string? value, string keyword) =>
-			!string.IsNullOrWhiteSpace(value) && value.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0;
-
-		static MethodBase? ResolveMethod(string name) {
-			if (string.IsNullOrWhiteSpace(name))
-				return null;
-
-			var parts = name.Split(new[] { ""$$"" }, 2, StringSplitOptions.None);
-			if (parts.Length == 2) {
-				var typeName = parts[0];
-				var methodName = parts[1];
-				var type = FindType(typeName);
-				if (type is not null)
-					return AccessTools.Method(type, methodName);
-			}
-
-			// Fallback: try Harmony's string-based resolver.
-			return AccessTools.Method(name);
-		}
-
-		static Type? FindType(string typeName) {
-			foreach (var asm in AppDomain.CurrentDomain.GetAssemblies()) {
-				Type? type = null;
-				try {
-					type = asm.GetTypes().FirstOrDefault(t =>
-						string.Equals(t.Name, typeName, StringComparison.Ordinal) ||
-						(t.FullName?.EndsWith(""."" + typeName, StringComparison.Ordinal) ?? false));
-				}
-				catch (ReflectionTypeLoadException ex) {
-					type = ex.Types?.FirstOrDefault(t =>
-						t is not null && (
-							string.Equals(t.Name, typeName, StringComparison.Ordinal) ||
-							(t.FullName?.EndsWith(""."" + typeName, StringComparison.Ordinal) ?? false)));
-				}
-				catch {
-				}
-
-				if (type is not null)
-					return type;
-			}
-
-			return null;
-		}
-	}
-
-	static class Patches {
-		public static bool BlockDamagePrefix() {
-			Plugin.LoggerInstance.LogInfo(""BlockDamagePrefix hit."");
-			return false; // skip original (invincible)
+			LoggerInstance.LogInfo($""Player found: {player.name}"");
 		}
 	}
 }";

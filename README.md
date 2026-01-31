@@ -114,7 +114,7 @@ If you have a pre-existing `.i64/.idb` from manual IDA work, register it first:
 ```
 Note: this validates `script.json` + `il2cpp.h` from the configured `il2cppRootDir` dump folder and writes a `.kiln.json` meta file next to the DB.
 
-`patch_codegen` will also emit a per-game plugin project under `modsRoot` when `gameDir` or `jobId` is provided (disable with `emitPluginProject: false`).
+`patch_codegen` will also emit a per-game plugin project under `modsRoot` when `gameDir` or `jobId` is provided (disable with `emitPluginProject: false`). It now outputs `mod_targets.json` and a mod-oriented plugin template (no default Harmony patching).
 
 ## MCP resources
 - List: `resources/list`
