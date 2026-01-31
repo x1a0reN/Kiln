@@ -59,6 +59,7 @@
 - 2026-01-30：仓库整理——.gitignore 忽略 publish/ 发布产物目录。
 - 2026-01-30：文档——扩展 kiln.exampleFlow，加入每个工具的用途与注意事项。
 - 2026-01-30：文档——补充最佳实践/常见错误/推荐顺序，并强制先读 exampleFlow。
+- 2026-01-30：发布——新增 scripts/publish.ps1，一键构建并整理 publish/Kiln 目录结构。
 ## 下一步
 - 实现 Phase 3：IDA headless 分析 + 符号/类型加载。
 - 实现 Phase 4：符号与伪代码导出。
