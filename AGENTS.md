@@ -91,6 +91,7 @@
 - 2026-01-31: Live patch_codegen now falls back to ida.list_funcs and tolerates string search/xref timeouts.
 - 2026-01-31: Live patch_codegen now auto-starts IDA before ida.* calls to avoid connection races.
 - 2026-01-31: Added resident ida-pro-mcp keep-alive loop and startup connection check.
+- 2026-02-01: ida-pro-mcp headless realtime: add HTTP proxy logging, add headless queue-mode main-thread pump, and update auto-start script to use queue pump + plugin path injection.
 
 ## Key Principles
 - Full relationships come from symbols/strings; pseudocode is on-demand with cache, exportAll is optional (default off).

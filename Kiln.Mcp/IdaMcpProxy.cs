@@ -358,7 +358,14 @@ namespace Kiln.Mcp {
 		static void WriteAutoScript(string path) {
 			const string script = 
 @"import idaapi
+import os
+import sys
 import time
+
+os.environ[""IDA_MCP_HEADLESS_MODE""] = ""queue""
+plugin_dir = os.path.join(os.environ.get(""APPDATA"", """"), ""Hex-Rays"", ""IDA Pro"", ""plugins"")
+if plugin_dir and plugin_dir not in sys.path:
+    sys.path.insert(0, plugin_dir)
 
 try:
     idaapi.auto_wait()
@@ -375,8 +382,10 @@ def try_start():
         MCP_SERVER.serve(""127.0.0.1"", 13337, request_handler=IdaMcpHttpRequestHandler)
         print(""[MCP] Server started via ida_mcp package"")
         return True
-    except Exception:
-        pass
+    except Exception as e:
+        import traceback
+        print(""[MCP] Direct start failed: %s"" % e)
+        print(traceback.format_exc())
     try:
         idaapi.load_and_run_plugin(""MCP"", 0)
         return True
@@ -394,9 +403,12 @@ for _ in range(60):
         break
     time.sleep(1)
 
+from ida_mcp import sync as mcp_sync
+
 while True:
     try:
-        idaapi.qsleep(1000)
+        mcp_sync.headless_pump(10, 0.0)
+        idaapi.qsleep(10)
     except Exception:
         time.sleep(1)
 ";
