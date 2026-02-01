@@ -98,6 +98,7 @@
 - 2026-02-01: Forked ida-pro-mcp to GitHub and switched _external/ida-pro-mcp to a submodule pinned to the fork.
 - 2026-02-01: ida-pro-mcp fork pinned commit: 94edf24afa6faa6696471ce9f61dd2385d376593.
 - 2026-02-01: Increase ida-pro-mcp default tool timeout to 30s; paginate Kiln live list_funcs queries.
+- 2026-02-01: Document ida-pro-mcp usage (tools/call + pagination) in kiln.exampleFlow.
 
 ## Key Principles
 - Full relationships come from symbols/strings; pseudocode is on-demand with cache, exportAll is optional (default off).

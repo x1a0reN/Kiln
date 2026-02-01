@@ -138,3 +138,5 @@ dotnet run --project Kiln.Mcp -c Release
 - 2026-02-01：ida-pro-mcp fork 固定提交：94edf24afa6faa6696471ce9f61dd2385d376593。
 
 - 2026-02-01：ida-pro-mcp 默认工具超时提升到 30 秒；Kiln 的实时 list_funcs 查询改为分页。
+
+- 2026-02-01：已在 kiln.exampleFlow 补充 ida-pro-mcp 使用说明（tools/call + 分页）。

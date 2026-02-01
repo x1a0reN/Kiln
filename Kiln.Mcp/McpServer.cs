@@ -3216,11 +3216,21 @@ detect_engine -> unity_locate -> il2cpp_dump (or manual dump) -> ida_analyze (or
 -> ida_export_symbols -> ida_export_pseudocode -> analysis.index.build -> analysis.* search
 -> patch_codegen -> package_mod
 
-Recommended live order (ida-pro-mcp):
-ida.list_funcs -> ida.find -> ida.xrefs_to -> ida.decompile -> patch_codegen (analysisMode=live)
-Notes:
-- Live mode uses ida-pro-mcp tools and does not require offline exports.
-- Offline exports remain available for large or repeatable analysis runs.
+  Recommended live order (ida-pro-mcp):
+  ida.list_funcs -> ida.find -> ida.xrefs_to -> ida.decompile -> patch_codegen (analysisMode=live)
+  Notes:
+  - Live mode uses ida-pro-mcp tools and does not require offline exports.
+  - Offline exports remain available for large or repeatable analysis runs.
+
+  ida-pro-mcp quickstart (via Kiln):
+  - Discover tools: tools/list -> names are prefixed as ida.*
+  - Always call ida-pro-mcp tools via tools/call:
+    {
+      ""name"": ""ida.list_funcs"",
+      ""arguments"": { ""queries"": { ""filter"": ""*Enemy*"", ""offset"": 0, ""count"": 50 } }
+    }
+  - Pagination: use count 50~200 and advance offset or next_offset; avoid count=0 (can time out).
+  - If live calls fail, check kiln.config.json (idaMcpEnabled/idaMcpCommand/idaMcpArgs) and ensure IDA is running.
 
 1) workflow.run (optional high-level flow)
 Purpose: Run a predefined workflow (currently Unity IL2CPP pipeline).
