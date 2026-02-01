@@ -45,9 +45,11 @@ dotnet run --project Kiln.Mcp -c Release
 
 Optional logging:
 - Set `KILN_MCP_LOG` to a file path to capture MCP logs.
+- Set `idaMcpHttpLogPath` in config to capture ida-pro-mcp HTTP proxy logs.
 
 ## Config defaults
 - `modsRoot` defaults to `mods\` under the Kiln root. `patch_codegen` will auto-generate per-game plugin projects here.
+- `idaMcpEnabled` in the template defaults to true to favor live ida-pro-mcp analysis.
 
 ## ida-pro-mcp proxy (live IDA tools)
 Kiln can spawn `ida-pro-mcp` as a stdio child process and expose its tool list as `ida.*` tools.
@@ -60,6 +62,15 @@ Example config (kiln.config.json):
 ```json
 {
   "idaMcpEnabled": true,
+  "idaMcpAutoStart": true,
+  "idaMcpHeadless": true,
+  "idaMcpAutoStartWaitSeconds": 180,
+  "idaMcpResident": true,
+  "idaMcpResidentPingSeconds": 10,
+  "idaMcpHttpLogPath": "workspace\\ida_mcp_http.log",
+  "idaMcpHealthCheckEnabled": true,
+  "idaMcpHealthCheckTimeoutSeconds": 30,
+  "idaMcpDatabasePath": "D:\\Game\\Example\\Reverse\\GameAssembly.dll.i64",
   "idaMcpCommand": "ida-pro-mcp",
   "idaMcpArgs": [
     "--transport",
@@ -70,6 +81,8 @@ Example config (kiln.config.json):
 }
 ```
 When enabled, `tools/list` will include `ida.*` entries and `tools/call` will forward to ida-pro-mcp in real time.
+When `idaMcpAutoStart` is true, Kiln can spawn IDA with the configured database path to start the MCP server automatically.
+When `idaMcpHealthCheckEnabled` is true, Kiln runs a lightweight ida-pro-mcp self-test on startup (tools/list + list_funcs + lookup_funcs).
 
 ## MCP tools
 - `kiln.help`
@@ -138,6 +151,7 @@ If you have a pre-existing `.i64/.idb` from manual IDA work, register it first:
 Note: this validates `script.json` + `il2cpp.h` from the configured `il2cppRootDir` dump folder and writes a `.kiln.json` meta file next to the DB.
 
 `patch_codegen` will also emit a per-game plugin project under `modsRoot` when `gameDir` or `jobId` is provided (disable with `emitPluginProject: false`). It now outputs `mod_targets.json` and a mod-oriented plugin template (no default Harmony patching).
+`patch_codegen` supports a live mode via ida-pro-mcp. Use `analysisMode: "live"` (or leave `auto` to prefer ida-pro-mcp when enabled) to generate targets from real-time IDA queries without exporting artifacts.
 
 ## MCP resources
 - List: `resources/list`

@@ -80,6 +80,12 @@
 - 2026-01-31：新增 modsRoot 配置与 patch_codegen 自动生成按游戏划分的插件工程，并将 IDA 导出/伪代码自动导出改为后台任务避免超时。
 - 2026-01-31：patch_codegen 输出改为 MOD 导向（BepInEx 插件），生成 mod_targets.json，移除默认 HarmonyX 补丁逻辑。
 - 2026-01-31：新增 ida-pro-mcp stdio 代理，动态同步 ida.* 工具并进行实时转发。
+- 2026-01-31：新增 patch_codegen 实时模式（基于 ida-pro-mcp，无需离线导出）并规范化 ida 工具 schema。
+- 2026-01-31：新增 ida-pro-mcp 自动拉起能力，可基于数据库路径启动 IDA 供实时模式使用。
+- 2026-01-31：新增 ida-pro-mcp 插件自动安装兜底，提升自动拉起成功率。
+- 2026-01-31：自动拉起优先使用 ida.exe/ida64.exe（当配置为 idat.exe 时），并记录启动日志。
+- 2026-01-31：自动拉起会清理未打包 DB 残留，并支持 headless 的 idat 启动。
+- 2026-01-31：新增 ida-pro-mcp 自动拉起等待时长配置。
 
 ## 关键理念
 - 关系数据以 symbols/strings 为主；伪代码按需导出并缓存，exportAll 可选且默认关闭。
@@ -119,3 +125,13 @@ dotnet run --project Kiln.Mcp -c Release
 - AGENTS.md 变更需同步更新 AGENTS-SC.md（规则块本身除外）。
 - 新增 MCP 工具时需要更新 kiln.exampleFlow 的示例与用法。
 - 所有改动在功能分支完成；PR 由用户发起并由用户最终合并。
+
+- 2026-01-31：ida-pro-mcp 自动启动强制使用 idat（headless），仅有 GUI IDA 时直接报错并拒绝启动。
+- 2026-01-31：headless ida-pro-mcp 自动启动增加 -A，避免弹窗阻塞。
+- 2026-01-31：live patch_codegen 在字符串检索/交叉引用超时后会回退到 ida.list_funcs。
+- 2026-01-31：live patch_codegen 在调用 ida.* 之前会先自动拉起 IDA，避免连接竞态。
+- 2026-01-31：新增 ida-pro-mcp 常驻保活循环并在启动时强制连通性检查。- 2026-02-01��ida-pro-mcp headless ʵʱͨ�ţ����� HTTP ������־������ headless �������̱߳ã��Զ������ű���Ϊ���б�+���·��ע�롣
+- 2026-02-01������ ida-pro-mcp HTTP ��־·��͸�� + �����Լ죨tools/list + list_funcs + lookup_funcs��������¶�����
+- 2026-02-01���޸� ida-pro-mcp HTTP ��־ f-string ת�����⣬ȷ�� stdio �������ڿ�����־ʱ������
+- 2026-02-01��publish.ps1 ���ڻḴ�� kiln.config.json ������Ŀ¼���������� MCP ���á�
+- 2026-02-01���� fork ida-pro-mcp ���� _external/ida-pro-mcp �л�Ϊָ��� fork ����ģ�飨�̶��ύ����

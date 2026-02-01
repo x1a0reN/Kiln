@@ -80,6 +80,22 @@
 - 2026-01-31: Added modsRoot config + per-game plugin project generation in patch_codegen, and made IDA export/pseudocode auto-export run as background jobs to avoid tool timeouts.
 - 2026-01-31: patch_codegen output switched to mod-centric templates (BepInEx plugin) with mod_targets.json, removing default HarmonyX patching.
 - 2026-01-31: Added ida-pro-mcp stdio proxy with dynamic ida.* tool sync and live tool forwarding.
+- 2026-01-31: Added live patch_codegen mode using ida-pro-mcp (no offline exports by default) and normalized ida tool schemas.
+- 2026-01-31: Added ida-pro-mcp auto-start support to launch IDA with a database for live patch_codegen.
+- 2026-01-31: Added ida-pro-mcp plugin auto-install fallback for auto-start flow.
+- 2026-01-31: Auto-start now prefers ida.exe/ida64.exe when idat.exe is configured, with launch logging.
+- 2026-01-31: Auto-start now cleans unpacked DB files and supports headless idat launch.
+- 2026-01-31: Added configurable auto-start wait time for ida-pro-mcp readiness.
+- 2026-01-31: Enforced headless idat launch for ida-pro-mcp auto-start and fail fast when only GUI IDA is available.
+- 2026-01-31: Headless ida-pro-mcp auto-start now uses -A to suppress dialogs/prompts.
+- 2026-01-31: Live patch_codegen now falls back to ida.list_funcs and tolerates string search/xref timeouts.
+- 2026-01-31: Live patch_codegen now auto-starts IDA before ida.* calls to avoid connection races.
+- 2026-01-31: Added resident ida-pro-mcp keep-alive loop and startup connection check.
+- 2026-02-01: ida-pro-mcp headless realtime: add HTTP proxy logging, add headless queue-mode main-thread pump, and update auto-start script to use queue pump + plugin path injection.
+- 2026-02-01: Add ida-pro-mcp HTTP log path passthrough + startup health check (tools/list + list_funcs + lookup_funcs), and expose config knobs.
+- 2026-02-01: Fix ida-pro-mcp HTTP log f-string escape regression so stdio proxy can start with logging enabled.
+- 2026-02-01: publish.ps1 now copies kiln.config.json into publish output to preserve local MCP settings.
+- 2026-02-01: Forked ida-pro-mcp to GitHub and switched _external/ida-pro-mcp to a submodule pinned to the fork.
 
 ## Key Principles
 - Full relationships come from symbols/strings; pseudocode is on-demand with cache, exportAll is optional (default off).

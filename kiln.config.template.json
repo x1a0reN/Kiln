@@ -4,7 +4,15 @@
   "idaOutputDir": "ida",
   "workspaceRoot": "workspace",
   "modsRoot": "mods",
-  "idaMcpEnabled": false,
+  "idaMcpEnabled": true,
+  "idaMcpAutoStart": true,
+  "idaMcpHeadless": true,
+  "idaMcpAutoStartWaitSeconds": 180,
+  "idaMcpResident": true,
+  "idaMcpResidentPingSeconds": 10,
+  "idaMcpHttpLogPath": "workspace\\ida_mcp_http.log",
+  "idaMcpHealthCheckEnabled": true,
+  "idaMcpHealthCheckTimeoutSeconds": 30,
   "idaMcpCommand": "ida-pro-mcp",
   "idaMcpArgs": [
     "--transport",
@@ -12,5 +20,6 @@
     "--ida-rpc",
     "http://127.0.0.1:13337"
   ],
-  "idaMcpWorkingDir": ""
+  "idaMcpWorkingDir": "",
+  "idaMcpDatabasePath": ""
 }
