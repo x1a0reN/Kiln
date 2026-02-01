@@ -135,4 +135,6 @@ dotnet run --project Kiln.Mcp -c Release
 - 2026-02-01：修复 ida-pro-mcp HTTP 日志 f-string 转义问题，确保 stdio 代理可在开启日志时启动。
 - 2026-02-01：publish.ps1 现在会复制 kiln.config.json 到发布目录，保留本地 MCP 配置。
 - 2026-02-01：已 fork ida-pro-mcp 并将 _external/ida-pro-mcp 切换为指向该 fork 的子模块（固定提交）。
-- 2026-02-01：ida-pro-mcp fork 固定提交：4525cb7272e627d278871426b62fd911bc11ba43。
+- 2026-02-01：ida-pro-mcp fork 固定提交：94edf24e4fc4c94c6ea2b4e9930504b8c4b59723。
+
+- 2026-02-01：ida-pro-mcp 默认工具超时提升到 30 秒；Kiln 的实时 list_funcs 查询改为分页。

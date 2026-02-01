@@ -1407,6 +1407,29 @@ namespace Kiln.Mcp {
 				set.Add(keyword);
 			}
 
+			static bool TryReadListFuncsPage(JToken? result, out JArray? data, out int? nextOffset) {
+				data = null;
+				nextOffset = null;
+				JObject? page = null;
+				if (result is JArray pages) {
+					page = pages.FirstOrDefault() as JObject;
+				}
+				else if (result is JObject pageObj) {
+					page = pageObj;
+				}
+				if (page is null)
+					return false;
+				if (page["data"] is JArray listData)
+					data = listData;
+				if (page.TryGetValue("next_offset", out var nextToken)) {
+					if (nextToken.Type == JTokenType.Integer)
+						nextOffset = nextToken.Value<int>();
+					else if (int.TryParse(nextToken.ToString(), out var parsed))
+						nextOffset = parsed;
+				}
+				return data is not null;
+			}
+
 			if (keywords.Count > 0 && maxStringMatches > 0 && maxStringXrefs > 0) {
 				foreach (var keyword in keywords) {
 					var findArgs = new JObject {
@@ -1471,48 +1494,50 @@ namespace Kiln.Mcp {
 			}
 
 			if (functions.Count == 0) {
-				var queryArray = new JArray();
+				var filters = new List<string>();
 				if (keywords.Count == 0) {
-					queryArray.Add(new JObject {
-						["offset"] = 0,
-						["count"] = maxFunctions,
-						["filter"] = "*",
-					});
+					filters.Add("*");
 				}
 				else {
-					foreach (var keyword in keywords) {
-						queryArray.Add(new JObject {
-							["offset"] = 0,
-							["count"] = maxFunctions,
-							["filter"] = keyword,
-						});
-					}
+					filters.AddRange(keywords);
 				}
 
 				try {
-					var listArgs = new JObject {
-						["queries"] = queryArray,
-					};
-					var listResult = await CallIdaToolStructuredAsync("ida.list_funcs", listArgs, token, databasePath, allowAutoStart).ConfigureAwait(false);
-					if (listResult is JArray pages) {
-						foreach (var page in pages.OfType<JObject>()) {
-							if (page["data"] is not JArray data)
-								continue;
+					var pageSize = Math.Clamp(Math.Min(50, maxFunctions), 10, 200);
+					foreach (var filter in filters) {
+						var offset = 0;
+						while (functions.Count < maxFunctions) {
+							var listArgs = new JObject {
+								["queries"] = new JArray {
+									new JObject {
+										["offset"] = offset,
+										["count"] = pageSize,
+										["filter"] = filter,
+									},
+								},
+							};
+							var listResult = await CallIdaToolStructuredAsync("ida.list_funcs", listArgs, token, databasePath, allowAutoStart).ConfigureAwait(false);
+							if (!TryReadListFuncsPage(listResult, out var data, out var nextOffset) || data is null || data.Count == 0)
+								break;
 							foreach (var entry in data.OfType<JObject>()) {
 								var addr = entry["addr"]?.Value<string>();
 								var name = entry["name"]?.Value<string>();
 								var size = ParseSize(entry["size"]?.Value<string>());
 								AddFunction(addr, name, size, 1);
+								if (functions.Count >= maxFunctions)
+									break;
 							}
+							if (functions.Count >= maxFunctions)
+								break;
+							var next = nextOffset ?? (offset + data.Count);
+							if (next <= offset)
+								break;
+							offset = next;
+							if (data.Count < pageSize)
+								break;
 						}
-					}
-					else if (listResult is JObject pageObj && pageObj["data"] is JArray data) {
-						foreach (var entry in data.OfType<JObject>()) {
-							var addr = entry["addr"]?.Value<string>();
-							var name = entry["name"]?.Value<string>();
-							var size = ParseSize(entry["size"]?.Value<string>());
-							AddFunction(addr, name, size, 1);
-						}
+						if (functions.Count >= maxFunctions)
+							break;
 					}
 				}
 				catch {
