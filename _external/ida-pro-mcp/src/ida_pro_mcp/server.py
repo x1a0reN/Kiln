@@ -66,17 +66,17 @@ def dispatch_proxy(request: dict | str | bytes | bytearray) -> JsonRpcResponse |
         elif isinstance(request, str):
             request = request.encode("utf-8")
         payload_len = len(request)
-        _log_http(f\"--> {request_obj.get('method')} id={request_obj.get('id')} bytes={payload_len}\")
+        _log_http(f"--> {request_obj.get('method')} id={request_obj.get('id')} bytes={payload_len}")
         conn.request("POST", "/mcp", request, {"Content-Type": "application/json"})
         response = conn.getresponse()
         data = response.read().decode()
         elapsed_ms = (time.perf_counter() - start) * 1000.0
-        _log_http(f\"<-- {request_obj.get('method')} id={request_obj.get('id')} status={response.status} bytes={len(data)} elapsed_ms={elapsed_ms:.1f}\")
+        _log_http(f"<-- {request_obj.get('method')} id={request_obj.get('id')} status={response.status} bytes={len(data)} elapsed_ms={elapsed_ms:.1f}")
         return json.loads(data)
     except Exception as e:
         full_info = traceback.format_exc()
         elapsed_ms = (time.perf_counter() - start) * 1000.0
-        _log_http(f\"!! {request_obj.get('method')} id={request_obj.get('id')} error={type(e).__name__} elapsed_ms={elapsed_ms:.1f} {e}\")
+        _log_http(f"!! {request_obj.get('method')} id={request_obj.get('id')} error={type(e).__name__} elapsed_ms={elapsed_ms:.1f} {e}")
         id = request_obj.get("id")
         if id is None:
             return None  # Notification, no response needed
