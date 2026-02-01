@@ -35,3 +35,8 @@ if (Test-Path $template) {
 		Copy-Item -Path $template -Destination $config -Force
 	}
 }
+
+$localConfig = Join-Path $root "kiln.config.json"
+if (Test-Path $localConfig) {
+	Copy-Item -Path $localConfig -Destination (Join-Path $PublishDir "kiln.config.json") -Force
+}
