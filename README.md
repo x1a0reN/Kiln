@@ -64,6 +64,8 @@ Example config (kiln.config.json):
   "idaMcpAutoStart": true,
   "idaMcpHeadless": true,
   "idaMcpAutoStartWaitSeconds": 180,
+  "idaMcpResident": true,
+  "idaMcpResidentPingSeconds": 10,
   "idaMcpDatabasePath": "D:\\Game\\Example\\Reverse\\GameAssembly.dll.i64",
   "idaMcpCommand": "ida-pro-mcp",
   "idaMcpArgs": [

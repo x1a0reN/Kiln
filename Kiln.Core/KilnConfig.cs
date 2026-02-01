@@ -17,6 +17,8 @@ namespace Kiln.Core {
 		public string? IdaMcpDatabasePath { get; set; }
 		public bool IdaMcpHeadless { get; set; }
 		public int IdaMcpAutoStartWaitSeconds { get; set; }
+		public bool IdaMcpResident { get; set; }
+		public int IdaMcpResidentPingSeconds { get; set; }
 
 		public static KilnConfig Load(string? baseDirectory = null) {
 			var root = ResolveRoot(baseDirectory);
@@ -34,6 +36,8 @@ namespace Kiln.Core {
 				IdaMcpDatabasePath = string.Empty,
 				IdaMcpHeadless = true,
 				IdaMcpAutoStartWaitSeconds = 180,
+				IdaMcpResident = true,
+				IdaMcpResidentPingSeconds = 10,
 			};
 
 			var configPath = Path.Combine(root, "kiln.config.json");

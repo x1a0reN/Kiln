@@ -8,6 +8,8 @@
   "idaMcpAutoStart": true,
   "idaMcpHeadless": true,
   "idaMcpAutoStartWaitSeconds": 180,
+  "idaMcpResident": true,
+  "idaMcpResidentPingSeconds": 10,
   "idaMcpCommand": "ida-pro-mcp",
   "idaMcpArgs": [
     "--transport",

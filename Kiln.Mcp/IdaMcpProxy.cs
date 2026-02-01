@@ -23,12 +23,15 @@ namespace Kiln.Mcp {
 		readonly McpStdioClient client;
 		readonly KilnConfig config;
 		readonly object idaGate = new object();
+		readonly object residentGate = new object();
 		Process? idaProcess;
 		string? idaAutoScriptPath;
 		bool pluginInstallAttempted;
 		readonly object cacheGate = new object();
 		List<IdaMcpProxyTool> cachedTools = new List<IdaMcpProxyTool>();
 		DateTime lastSyncUtc = DateTime.MinValue;
+		CancellationTokenSource? residentCts;
+		Task? residentTask;
 
 		public bool Enabled { get; }
 		public string Prefix => ToolPrefix;
@@ -141,6 +144,41 @@ namespace Kiln.Mcp {
 			if (!ready)
 				KilnLog.Warn("ida-pro-mcp auto-start: IDA server not ready yet.");
 			return ready;
+		}
+
+		public void EnsureResident(CancellationToken token) {
+			if (!Enabled || !config.IdaMcpAutoStart || !config.IdaMcpResident)
+				return;
+			lock (residentGate) {
+				if (residentTask is not null && !residentTask.IsCompleted)
+					return;
+				residentCts?.Cancel();
+				residentCts?.Dispose();
+				residentCts = CancellationTokenSource.CreateLinkedTokenSource(token);
+				residentTask = Task.Run(() => ResidentLoopAsync(residentCts.Token));
+			}
+		}
+
+		async Task ResidentLoopAsync(CancellationToken token) {
+			var intervalSeconds = config.IdaMcpResidentPingSeconds <= 0 ? 10 : config.IdaMcpResidentPingSeconds;
+			var delay = TimeSpan.FromSeconds(intervalSeconds);
+			while (!token.IsCancellationRequested) {
+				try {
+					await TryAutoStartAsync(null, token).ConfigureAwait(false);
+					await client.EnsureInitializedAsync(token, InitTimeout).ConfigureAwait(false);
+					await client.SendRequestAsync("tools/list", new JObject(), token, ToolListTimeout).ConfigureAwait(false);
+				}
+				catch (Exception ex) {
+					KilnLog.Warn($"ida-pro-mcp resident ping failed: {ex.Message}");
+				}
+
+				try {
+					await Task.Delay(delay, token).ConfigureAwait(false);
+				}
+				catch (OperationCanceledException) {
+					break;
+				}
+			}
 		}
 
 		void EnsurePluginInstalled() {
@@ -460,6 +498,12 @@ while True:
 
 		public void Dispose() {
 			client.Dispose();
+			lock (residentGate) {
+				residentCts?.Cancel();
+				residentCts?.Dispose();
+				residentCts = null;
+				residentTask = null;
+			}
 			lock (idaGate) {
 				if (idaProcess is null)
 					return;

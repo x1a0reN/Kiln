@@ -35,6 +35,15 @@ namespace Kiln.Mcp {
 
 		public async Task RunAsync(CancellationToken token) {
 			try {
+				if (idaProxy is not null && idaProxy.Enabled && config.IdaMcpAutoStart) {
+					idaProxy.EnsureResident(token);
+					var ready = await idaProxy.TryAutoStartAsync(null, token).ConfigureAwait(false);
+					if (ready)
+						KilnLog.Info("ida-pro-mcp resident: IDA connected.");
+					else
+						KilnLog.Warn("ida-pro-mcp resident: failed to connect to IDA.");
+				}
+
 				while (!token.IsCancellationRequested) {
 					var line = await Console.In.ReadLineAsync().ConfigureAwait(false);
 					if (line is null)
