@@ -134,3 +134,4 @@ dotnet run --project Kiln.Mcp -c Release
 - 2026-02-01：增加 ida-pro-mcp HTTP 日志路径透传 + 启动自检（tools/list + list_funcs + lookup_funcs），并暴露配置项。
 - 2026-02-01：修复 ida-pro-mcp HTTP 日志 f-string 转义问题，确保 stdio 代理可在开启日志时启动。
 - 2026-02-01：publish.ps1 现在会复制 kiln.config.json 到发布目录，保留本地 MCP 配置。
+- 2026-02-01：已 fork ida-pro-mcp 并将 _external/ida-pro-mcp 切换为指向该 fork 的子模块（固定提交）。

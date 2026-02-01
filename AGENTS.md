@@ -95,6 +95,7 @@
 - 2026-02-01: Add ida-pro-mcp HTTP log path passthrough + startup health check (tools/list + list_funcs + lookup_funcs), and expose config knobs.
 - 2026-02-01: Fix ida-pro-mcp HTTP log f-string escape regression so stdio proxy can start with logging enabled.
 - 2026-02-01: publish.ps1 now copies kiln.config.json into publish output to preserve local MCP settings.
+- 2026-02-01: Forked ida-pro-mcp to GitHub and switched _external/ida-pro-mcp to a submodule pinned to the fork.
 
 ## Key Principles
 - Full relationships come from symbols/strings; pseudocode is on-demand with cache, exportAll is optional (default off).
