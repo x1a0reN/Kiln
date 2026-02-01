@@ -10,6 +10,9 @@
   "idaMcpAutoStartWaitSeconds": 180,
   "idaMcpResident": true,
   "idaMcpResidentPingSeconds": 10,
+  "idaMcpHttpLogPath": "workspace\\ida_mcp_http.log",
+  "idaMcpHealthCheckEnabled": true,
+  "idaMcpHealthCheckTimeoutSeconds": 30,
   "idaMcpCommand": "ida-pro-mcp",
   "idaMcpArgs": [
     "--transport",

@@ -24,9 +24,11 @@ namespace Kiln.Mcp {
 		readonly KilnConfig config;
 		readonly object idaGate = new object();
 		readonly object residentGate = new object();
+		readonly object healthGate = new object();
 		Process? idaProcess;
 		string? idaAutoScriptPath;
 		bool pluginInstallAttempted;
+		bool healthCheckCompleted;
 		readonly object cacheGate = new object();
 		List<IdaMcpProxyTool> cachedTools = new List<IdaMcpProxyTool>();
 		DateTime lastSyncUtc = DateTime.MinValue;
@@ -40,7 +42,8 @@ namespace Kiln.Mcp {
 			this.config = config ?? throw new ArgumentNullException(nameof(config));
 			Enabled = config.IdaMcpEnabled && !string.IsNullOrWhiteSpace(config.IdaMcpCommand);
 			var args = config.IdaMcpArgs ?? Array.Empty<string>();
-			client = new McpStdioClient(config.IdaMcpCommand ?? string.Empty, args, config.IdaMcpWorkingDir);
+			var env = BuildMcpEnvironment(config);
+			client = new McpStdioClient(config.IdaMcpCommand ?? string.Empty, args, config.IdaMcpWorkingDir, env);
 		}
 
 		public static IdaMcpProxy? TryCreate(KilnConfig config) {
@@ -146,6 +149,71 @@ namespace Kiln.Mcp {
 			return ready;
 		}
 
+		public async Task<bool> RunHealthCheckAsync(CancellationToken token) {
+			if (!Enabled)
+				return false;
+
+			var enabled = config.IdaMcpHealthCheckEnabled ?? true;
+			if (!enabled)
+				return false;
+
+			lock (healthGate) {
+				if (healthCheckCompleted)
+					return true;
+			}
+
+			var timeoutSeconds = config.IdaMcpHealthCheckTimeoutSeconds ?? 30;
+			if (timeoutSeconds <= 0)
+				timeoutSeconds = 30;
+			var timeout = TimeSpan.FromSeconds(timeoutSeconds);
+
+			try {
+				await client.EnsureInitializedAsync(token, InitTimeout).ConfigureAwait(false);
+				var tools = await client.SendRequestAsync("tools/list", new JObject(), token, timeout).ConfigureAwait(false);
+				var toolNames = (tools["result"]?["tools"] as JArray)?.Select(t => t?["name"]?.Value<string>()).Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t!).ToHashSet(StringComparer.OrdinalIgnoreCase)
+					?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+				if (!toolNames.Contains("list_funcs")) {
+					KilnLog.Warn("ida-pro-mcp health check failed: list_funcs not available.");
+					return false;
+				}
+
+				var listArgs = new JObject {
+					["name"] = "list_funcs",
+					["arguments"] = new JObject {
+						["queries"] = new JObject {
+							["filter"] = "*",
+							["offset"] = 0,
+							["count"] = 1,
+						},
+					},
+				};
+				var listResp = await client.SendRequestAsync("tools/call", listArgs, token, timeout).ConfigureAwait(false);
+				var addr = ExtractFirstAddress(listResp["result"] as JObject);
+				if (string.IsNullOrWhiteSpace(addr)) {
+					KilnLog.Warn("ida-pro-mcp health check failed: list_funcs returned no data.");
+					return false;
+				}
+
+				var lookupArgs = new JObject {
+					["name"] = "lookup_funcs",
+					["arguments"] = new JObject {
+						["queries"] = new JArray(addr),
+					},
+				};
+				await client.SendRequestAsync("tools/call", lookupArgs, token, timeout).ConfigureAwait(false);
+
+				lock (healthGate) {
+					healthCheckCompleted = true;
+				}
+				KilnLog.Info("ida-pro-mcp health check ok.");
+				return true;
+			}
+			catch (Exception ex) {
+				KilnLog.Warn($"ida-pro-mcp health check failed: {ex.Message}");
+				return false;
+			}
+		}
+
 		public void EnsureResident(CancellationToken token) {
 			if (!Enabled || !config.IdaMcpAutoStart || !config.IdaMcpResident)
 				return;
@@ -213,6 +281,39 @@ namespace Kiln.Mcp {
 			catch (Exception ex) {
 				KilnLog.Warn($"ida-pro-mcp plugin auto-install failed: {ex.Message}");
 			}
+		}
+
+		static IReadOnlyDictionary<string, string>? BuildMcpEnvironment(KilnConfig config) {
+			if (config is null)
+				return null;
+			var hasLog = !string.IsNullOrWhiteSpace(config.IdaMcpHttpLogPath);
+			if (!hasLog)
+				return null;
+			var env = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+			env["IDA_MCP_HTTP_LOG"] = config.IdaMcpHttpLogPath!;
+			return env;
+		}
+
+		static string? ExtractFirstAddress(JObject? result) {
+			if (result is null)
+				return null;
+			if (result["isError"]?.Value<bool>() == true)
+				return null;
+			var text = result["content"]?.First?["text"]?.Value<string>();
+			if (!string.IsNullOrWhiteSpace(text)) {
+				try {
+					var parsed = JArray.Parse(text);
+					var data = parsed[0]?["data"] as JArray;
+					var addr = data?.First?["addr"]?.Value<string>();
+					if (!string.IsNullOrWhiteSpace(addr))
+						return addr;
+				}
+				catch {
+				}
+			}
+			var structured = result["structuredContent"]?["result"] as JArray;
+			var addr2 = structured?.First?["data"]?.First?["addr"]?.Value<string>();
+			return addr2;
 		}
 
 		string? ResolveDatabasePath(string? databasePath) {
@@ -547,6 +648,7 @@ while True:
 		readonly string command;
 		readonly IReadOnlyList<string> args;
 		readonly string? workingDir;
+		readonly IReadOnlyDictionary<string, string>? environment;
 		readonly SemaphoreSlim writeLock = new SemaphoreSlim(1, 1);
 		readonly SemaphoreSlim initLock = new SemaphoreSlim(1, 1);
 		readonly object gate = new object();
@@ -561,10 +663,11 @@ while True:
 		int nextId;
 		bool initialized;
 
-		public McpStdioClient(string command, IReadOnlyList<string> args, string? workingDir) {
+		public McpStdioClient(string command, IReadOnlyList<string> args, string? workingDir, IReadOnlyDictionary<string, string>? environment) {
 			this.command = command;
 			this.args = args ?? Array.Empty<string>();
 			this.workingDir = string.IsNullOrWhiteSpace(workingDir) ? null : workingDir;
+			this.environment = environment;
 		}
 
 		public async Task EnsureInitializedAsync(CancellationToken token, TimeSpan timeout) {
@@ -683,6 +786,13 @@ while True:
 				info.WorkingDirectory = workingDir!;
 			foreach (var arg in args)
 				info.ArgumentList.Add(arg);
+			if (environment is not null) {
+				foreach (var pair in environment) {
+					if (string.IsNullOrWhiteSpace(pair.Key))
+						continue;
+					info.Environment[pair.Key] = pair.Value ?? string.Empty;
+				}
+			}
 
 			process = new Process { StartInfo = info };
 			if (!process.Start())

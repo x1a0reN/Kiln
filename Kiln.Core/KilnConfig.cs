@@ -19,6 +19,9 @@ namespace Kiln.Core {
 		public int IdaMcpAutoStartWaitSeconds { get; set; }
 		public bool IdaMcpResident { get; set; }
 		public int IdaMcpResidentPingSeconds { get; set; }
+		public string? IdaMcpHttpLogPath { get; set; }
+		public bool? IdaMcpHealthCheckEnabled { get; set; }
+		public int? IdaMcpHealthCheckTimeoutSeconds { get; set; }
 
 		public static KilnConfig Load(string? baseDirectory = null) {
 			var root = ResolveRoot(baseDirectory);
@@ -38,6 +41,9 @@ namespace Kiln.Core {
 				IdaMcpAutoStartWaitSeconds = 180,
 				IdaMcpResident = true,
 				IdaMcpResidentPingSeconds = 10,
+				IdaMcpHttpLogPath = string.Empty,
+				IdaMcpHealthCheckEnabled = true,
+				IdaMcpHealthCheckTimeoutSeconds = 30,
 			};
 
 			var configPath = Path.Combine(root, "kiln.config.json");
@@ -57,6 +63,9 @@ namespace Kiln.Core {
 				loaded.IdaMcpCommand = NormalizeCommand(root, loaded.IdaMcpCommand);
 				loaded.IdaMcpWorkingDir = NormalizeOptionalPath(root, loaded.IdaMcpWorkingDir);
 				loaded.IdaMcpDatabasePath = NormalizeOptionalPath(root, loaded.IdaMcpDatabasePath);
+				loaded.IdaMcpHttpLogPath = NormalizeOptionalPath(root, loaded.IdaMcpHttpLogPath);
+				loaded.IdaMcpHealthCheckEnabled ??= defaults.IdaMcpHealthCheckEnabled;
+				loaded.IdaMcpHealthCheckTimeoutSeconds ??= defaults.IdaMcpHealthCheckTimeoutSeconds;
 				loaded.IdaMcpArgs ??= Array.Empty<string>();
 				if (!loaded.IdaMcpEnabled && !string.IsNullOrWhiteSpace(loaded.IdaMcpCommand))
 					loaded.IdaMcpEnabled = true;

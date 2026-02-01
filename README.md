@@ -45,6 +45,7 @@ dotnet run --project Kiln.Mcp -c Release
 
 Optional logging:
 - Set `KILN_MCP_LOG` to a file path to capture MCP logs.
+- Set `idaMcpHttpLogPath` in config to capture ida-pro-mcp HTTP proxy logs.
 
 ## Config defaults
 - `modsRoot` defaults to `mods\` under the Kiln root. `patch_codegen` will auto-generate per-game plugin projects here.
@@ -66,6 +67,9 @@ Example config (kiln.config.json):
   "idaMcpAutoStartWaitSeconds": 180,
   "idaMcpResident": true,
   "idaMcpResidentPingSeconds": 10,
+  "idaMcpHttpLogPath": "workspace\\ida_mcp_http.log",
+  "idaMcpHealthCheckEnabled": true,
+  "idaMcpHealthCheckTimeoutSeconds": 30,
   "idaMcpDatabasePath": "D:\\Game\\Example\\Reverse\\GameAssembly.dll.i64",
   "idaMcpCommand": "ida-pro-mcp",
   "idaMcpArgs": [
@@ -78,6 +82,7 @@ Example config (kiln.config.json):
 ```
 When enabled, `tools/list` will include `ida.*` entries and `tools/call` will forward to ida-pro-mcp in real time.
 When `idaMcpAutoStart` is true, Kiln can spawn IDA with the configured database path to start the MCP server automatically.
+When `idaMcpHealthCheckEnabled` is true, Kiln runs a lightweight ida-pro-mcp self-test on startup (tools/list + list_funcs + lookup_funcs).
 
 ## MCP tools
 - `kiln.help`

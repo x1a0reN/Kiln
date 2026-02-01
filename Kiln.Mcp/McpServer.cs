@@ -42,6 +42,7 @@ namespace Kiln.Mcp {
 						KilnLog.Info("ida-pro-mcp resident: IDA connected.");
 					else
 						KilnLog.Warn("ida-pro-mcp resident: failed to connect to IDA.");
+					await idaProxy.RunHealthCheckAsync(token).ConfigureAwait(false);
 				}
 
 				while (!token.IsCancellationRequested) {
