@@ -57,7 +57,7 @@ Kiln can spawn `ida-pro-mcp` as a stdio child process and expose its tool list a
 Requirements:
 - Install ida-pro-mcp and the IDA plugin (RPC server).
 - Ensure the IDA plugin RPC is reachable (default: `http://127.0.0.1:13337`).
-- Fork pin: `_external/ida-pro-mcp` uses `https://github.com/x1a0reN/ida-pro-mcp` at commit `94edf24e4fc4c94c6ea2b4e9930504b8c4b59723` for headless realtime support.
+- Fork pin: `_external/ida-pro-mcp` uses `https://github.com/x1a0reN/ida-pro-mcp` at commit `94edf24afa6faa6696471ce9f61dd2385d376593` for headless realtime support.
 
 Example config (kiln.config.json):
 ```json

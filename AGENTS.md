@@ -96,7 +96,7 @@
 - 2026-02-01: Fix ida-pro-mcp HTTP log f-string escape regression so stdio proxy can start with logging enabled.
 - 2026-02-01: publish.ps1 now copies kiln.config.json into publish output to preserve local MCP settings.
 - 2026-02-01: Forked ida-pro-mcp to GitHub and switched _external/ida-pro-mcp to a submodule pinned to the fork.
-- 2026-02-01: ida-pro-mcp fork pinned commit: 94edf24e4fc4c94c6ea2b4e9930504b8c4b59723.
+- 2026-02-01: ida-pro-mcp fork pinned commit: 94edf24afa6faa6696471ce9f61dd2385d376593.
 - 2026-02-01: Increase ida-pro-mcp default tool timeout to 30s; paginate Kiln live list_funcs queries.
 
 ## Key Principles
